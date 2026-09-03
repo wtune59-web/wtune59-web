@@ -339,7 +339,6 @@ elif app_mode == "خريطة السيولة ونقاط التصفية (Liquidati
                 current_p = float(df_hm['Close'].iloc[-1])
                 st.success(f"تم تحليل خريطة السيولة بنجاح لـ {hm_symbol} عند سعر ${current_p:,.2f}")
                 
-                # رسم خريطة محاكاة التصفية
                 fig_hm = go.Figure(go.Scatter(
                     x=df_hm.index[-60:],
                     y=df_hm['Close'].iloc[-60:],
@@ -348,7 +347,7 @@ elif app_mode == "خريطة السيولة ونقاط التصفية (Liquidati
                     name='حركة السعر والسيولة'
                 ))
                 fig_hm.update_layout(template="plotly_dark", title="مستويات تركز التصفية ومناطق تجميع الحيتان", height=450)
-                st.plotly_chart(fig_hm, use_container_width=True)
+                st.plotly_chart(fig_hm, width="stretch")
                 
                 col1, col2 = st.columns(2)
                 col1.metric("منطقة تصفية البائعين المرتفعة (Short Squeeze)", f"${current_p * 1.04:,.2f}")
@@ -393,7 +392,7 @@ elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal &
     trades_df = get_trade_journal(st.session_state['username'])
     if not trades_df.empty:
         st.subheader("📋 جدول الصفقات المسجلة")
-        st.dataframe(trades_df, use_container_width=True)
+        st.dataframe(trades_df, width="stretch")
     else:
         st.info("لا توجد صفقات مسجلة حتى الآن. يمكنك تسجيل صفقات من خلال لوحة التحليل الفردي.")
 
@@ -465,7 +464,7 @@ elif app_mode == "مصفوفة مقارنة الأسواق والـ MPT":
         rets = pdf.pct_change().dropna()
         
         st.subheader("🔗 مصفوفة الارتباط (Correlation Matrix)")
-        st.plotly_chart(px.imshow(rets.corr(), text_auto=True, color_continuous_scale="RdBu_r", aspect="auto"), use_container_width=True)
+        st.plotly_chart(px.imshow(rets.corr(), text_auto=True, color_continuous_scale="RdBu_r", aspect="auto"), width="stretch")
         
         st.subheader("⚖️ الأوزان المثالية حسب نموذج شارب")
         mean_r = rets.mean()
@@ -547,7 +546,6 @@ else:
             dec_str = "📈 شراء" if prediction == 1 and max_prob >= conf_threshold_input else ("📉 بيع" if prediction == 0 and max_prob >= conf_threshold_input else "⚠️ ترقب")
             st.metric("قرار النظام المستقل", dec_str, delta=f"الثقة: {max_prob*100:.1f}%")
 
-        # وكيل التحليل الذكي المتكلم
         st.markdown("---")
         st.subheader("💬 تقرير وكيل الذكاء الاصطناعي التحليلي (AI Analyst Commentary)")
         commentary_text = f"""
@@ -581,7 +579,7 @@ else:
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='السعر', line=dict(color='#00FFA3', width=2)))
         fig.update_layout(template="plotly_dark", height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         st.markdown("---")
         st.subheader("📑 تقرير التحليل المؤسسي القابل للتصدير")
