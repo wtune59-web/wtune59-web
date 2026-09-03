@@ -417,6 +417,9 @@ elif app_mode == "مخبتر اختبار الاستراتيجيات والتح�
             X_op = np.ascontiguousarray(cl_op[advanced_features].astype(float).values)
             y_op = (cl_op['Close'].shift(-1) > cl_op['Close']).astype(int).values
             
+            # تنظيف المصفوفة من القيم الشاذة والـ NaN/Inf
+            X_op = np.nan_to_num(X_op, nan=0.0, posinf=0.0, neginf=0.0)
+            
             opt_model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
             opt_model.fit(X_op, y_op)
             
@@ -453,6 +456,9 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                     if len(cl_t) > 20:
                         Xt = np.ascontiguousarray(cl_t[advanced_features].astype(float).values)
                         yt = (cl_t['Close'].shift(-1) > cl_t['Close']).astype(int).values
+                        
+                        # تنظيف مصفوفة الماسح الشامل من الـ NaN و Inf
+                        Xt = np.nan_to_num(Xt, nan=0.0, posinf=0.0, neginf=0.0)
                         
                         rf_t = RandomForestClassifier(n_estimators=100, max_depth=4, random_state=42)
                         rf_t.fit(Xt, yt)
@@ -501,10 +507,15 @@ else:
         X = np.ascontiguousarray(clean_data[advanced_features].astype(float).values)
         y = (clean_data['Close'].shift(-1) > clean_data['Close']).astype(int).values
         
+        # تنظيف المصفوفة الرئيسية لمنع حدوث خطأ التدريب
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        
         rf_model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
         rf_model.fit(X, y)
 
         today_features = np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values)
+        today_features = np.nan_to_num(today_features, nan=0.0, posinf=0.0, neginf=0.0)
+        
         ensemble_probs = rf_model.predict_proba(today_features)[0]
         prediction = 1 if ensemble_probs[1] > ensemble_probs[0] else 0
         max_prob = max(ensemble_probs)
