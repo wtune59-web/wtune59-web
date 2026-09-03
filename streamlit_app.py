@@ -270,6 +270,9 @@ def load_and_process_data(symbol, rsi_window=14):
         data['MACD'] = exp1 - exp2
         data['MACD_Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
         
+        # إنشاء الهدف بشكل آمن لتفادي مشاكل الأبعاد
+        data['Target'] = (data['Close'].shift(-1) > data['Close']).astype(int)
+        
         data = data.bfill().ffill().fillna(0)
         return data
     except Exception as e:
@@ -404,8 +407,8 @@ elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML L
         df_lb = load_and_process_data(lab_symbol)
         if df_lb is not None and not df_lb.empty:
             cl_l = df_lb.dropna()
-            X_l = np.nan_to_num(np.ascontiguousarray(cl_l[advanced_features].astype(float).values), nan=0.0)
-            y_l = (cl_l['Close'].shift(-1) > cl_l['Close']).astype(int).values
+            X_l = np.nan_to_num(np.ascontiguousarray(cl_l[advanced_features].astype(float).values), nan=0.0, posinf=0.0, neginf=0.0)
+            y_l = cl_l['Target'].astype(int).values
             
             model_l = get_trained_model(model_algo_choice)
             model_l.fit(X_l, y_l)
@@ -477,8 +480,8 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                 if df_temp is not None and not df_temp.empty:
                     cl_t = df_temp.dropna()
                     if len(cl_t) > 20:
-                        Xt = np.nan_to_num(np.ascontiguousarray(cl_t[advanced_features].astype(float).values), nan=0.0)
-                        yt = (cl_t['Close'].shift(-1) > cl_t['Close']).astype(int).values
+                        Xt = np.nan_to_num(np.ascontiguousarray(cl_t[advanced_features].astype(float).values), nan=0.0, posinf=0.0, neginf=0.0)
+                        yt = cl_t['Target'].astype(int).values
                         rf_t = get_trained_model(model_algo_choice)
                         rf_t.fit(Xt, yt)
                         avg_p = rf_t.predict_proba(Xt[-1:])[0]
@@ -510,13 +513,13 @@ else:
         st.error(f"⚠️ عذراً، تعذر جلب البيانات للرمز '{crypto_symbol}'. يرجى التحقق من صحة الرمز أو اختيار أصل آخر.")
     else:
         clean_data = data.dropna()
-        X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0)
-        y = (clean_data['Close'].shift(-1) > clean_data['Close']).astype(int).values
+        X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0, posinf=0.0, neginf=0.0)
+        y = clean_data['Target'].astype(int).values
         
         model_instance = get_trained_model(model_algo_choice)
         model_instance.fit(X, y)
 
-        today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
+        today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0, posinf=0.0, neginf=0.0)
         ensemble_probs = model_instance.predict_proba(today_features)[0]
         prediction = 1 if ensemble_probs[1] > ensemble_probs[0] else 0
         max_prob = max(ensemble_probs)
