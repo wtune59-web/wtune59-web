@@ -63,21 +63,6 @@ def get_user_token(username):
     conn.close()
     return data[0] if data and data[0] else "غير متوفر"
 
-def save_user_portfolio(username, symbol, qty, buy_price):
-    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
-    c = conn.cursor()
-    c.execute('INSERT OR REPLACE INTO portfolios(username, symbol, qty, buy_price) VALUES (?, ?, ?, ?)', (username, symbol, qty, buy_price))
-    conn.commit()
-    conn.close()
-
-def get_user_portfolio(username, symbol):
-    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
-    c = conn.cursor()
-    c.execute('SELECT qty, buy_price FROM portfolios WHERE username = ? AND symbol = ?', (username, symbol))
-    data = c.fetchone()
-    conn.close()
-    return data if data else (0.0, 0.0)
-
 def log_trade(username, symbol, action, price, qty, pnl=0.0):
     conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     c = conn.cursor()
@@ -163,12 +148,12 @@ if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🤖 
     user_symbol_input = st.sidebar.text_input("أو أدخل الرمز المباشر (Yahoo Ticker):", value=default_sym)
     crypto_symbol = user_symbol_input.strip().upper()
 
-# --- دوال المعالجة المتقدمة والمستقرة ---
+# --- دوال المعالجة والآمان المحسنة ضد الأخطاء ---
 @st.cache_data(ttl=3600)
 def get_fear_and_greed():
     try:
         url = "https://api.alternative.me/fng/?limit=0"
-        response = requests.get(url).json()
+        response = requests.get(url, timeout=5).json()
         df = pd.DataFrame(response['data'])
         df['value'] = df['value'].astype(int)
         df['Date'] = pd.to_datetime(df['timestamp'].astype(int), unit='s').dt.strftime('%Y-%m-%d')
@@ -180,6 +165,8 @@ def get_fear_and_greed():
 def get_vix_data():
     try:
         vix = yf.download('^VIX', period='1y', progress=False)
+        if vix is None or vix.empty:
+            return None
         if isinstance(vix.columns, pd.MultiIndex):
             vix.columns = vix.columns.get_level_values(0)
         vix = vix.reset_index()
@@ -191,24 +178,31 @@ def get_vix_data():
 @st.cache_data(ttl=3600)
 def load_and_process_data(symbol, rsi_window=14):
     try:
+        # جلب البيانات مع حماية كاملة ضد توقف السيرفر
         data = yf.download(symbol, period='1y', progress=False)
-        if data.empty:
+        
+        if data is None or data.empty:
             return None
+            
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
-        
+            
+        required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+        if not all(col in data.columns for col in required_cols):
+            return None
+            
         data = data.reset_index()
         data['Date'] = pd.to_datetime(data['Date']).dt.strftime('%Y-%m-%d')
         
         fng_df = get_fear_and_greed()
-        if fng_df is not None:
+        if fng_df is not None and not fng_df.empty:
             data = pd.merge(data, fng_df, on='Date', how='left')
             data['Fear_Greed_Index'] = data['Fear_Greed_Index'].fillna(50)
         else:
             data['Fear_Greed_Index'] = 50
 
         vix_df = get_vix_data()
-        if vix_df is not None:
+        if vix_df is not None and not vix_df.empty:
             data = pd.merge(data, vix_df, on='Date', how='left')
             data['VIX'] = data['VIX'].fillna(20.0)
         else:
@@ -216,9 +210,8 @@ def load_and_process_data(symbol, rsi_window=14):
             
         data.set_index('Date', inplace=True)
         
-        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-            if col in data.columns:
-                data[col] = pd.to_numeric(data[col], errors='coerce')
+        for col in required_cols:
+            data[col] = pd.to_numeric(data[col], errors='coerce')
                 
         data['Price_Change'] = data['Close'].pct_change()
         data['Volume_Change'] = data['Volume'].pct_change()
@@ -280,7 +273,8 @@ def load_and_process_data(symbol, rsi_window=14):
         
         data = data.bfill().ffill().fillna(0)
         return data
-    except:
+    except Exception as e:
+        print(f"Error loading {symbol}: {e}")
         return None
 
 advanced_features = [
@@ -295,16 +289,16 @@ def get_trained_model(algo_name):
     else:
         return RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
 
-# --- تطبيق واجهات النظام الشاملة والجديدة ---
+# --- تطبيق واجهات النظام الشاملة ---
 
 if app_mode == "🤖 المساعد الذكي للتحليل المدمج (Quant AI Assistant)":
     st.title("🤖 المساعد الذكي للتحليل المدمج (GenAI Quant Expert)")
     st.caption("اسأل المساعد الذكي عن أداء الأصل الحالي، استراتيجيات التوزيع، أو تحليل السوق.")
     
-    user_q = st.text_input("أدخل سؤالك المالي (مثلاً: ما هو تقييمك لحركة البيتكوين الحالية؟):")
+    user_q = st.text_input("أدخل سؤالك المالي:")
     if st.button("💬 إرسال للمساعد الذكي"):
         df_q = load_and_process_data(crypto_symbol)
-        if df_q is not None:
+        if df_q is not None and not df_q.empty:
             cur_p = float(df_q['Close'].iloc[-1])
             cur_rsi = float(df_q['RSI'].iloc[-1])
             cur_adx = float(df_q['ADX'].iloc[-1])
@@ -313,16 +307,17 @@ if app_mode == "🤖 المساعد الذكي للتحليل المدمج (Quan
 - السعر الحالي: ${cur_p:,.2f}
 - مؤشر القوة النسبية RSI: {cur_rsi:.1f}
 - قوة الاتجاه ADX: {cur_adx:.1f}
-
-بناءً على المعطيات الكمية اللحظية، الأصل يحافظ على استقرار نسبي. يُنصح بمتابعة مستويات وقف الخسارة بحذر وإدارة المخاطر بدقة."""
+بناءً على المعطيات الكمية اللحظية، الأصل يحافظ على استقرار نسبي."""
             st.info(response_text)
+        else:
+            st.error(f"عذراً، تعذر جلب بيانات الرمز '{crypto_symbol}'. حاول التأكد من صحة الرمز أو اختيار أصل بديل.")
 
 elif app_mode == "🧪 محرك الاختبار الخلفي التاريخي (Advanced Backtesting)":
     st.title("🧪 محرك الاختبار الخلفي للاستراتيجيات (Backtesting Engine)")
     bt_symbol = st.text_input("رمز الأصل للاختبار الخلفي:", value="TAO-USD")
     if st.button("🚀 تشغيل الاختبار الخلفي لمدة سنة"):
         df_bt = load_and_process_data(bt_symbol)
-        if df_bt is not None:
+        if df_bt is not None and not df_bt.empty:
             df_bt['Signal'] = np.where(df_bt['RSI'] < 40, 1, np.where(df_bt['RSI'] > 70, -1, 0))
             df_bt['Strategy_Returns'] = df_bt['Signal'].shift(1) * df_bt['Price_Change']
             cum_returns = (1 + df_bt['Strategy_Returns'].fillna(0)).cumprod() - 1
@@ -334,11 +329,11 @@ elif app_mode == "🧪 محرك الاختبار الخلفي التاريخي (
             fig_bt.add_trace(go.Scatter(x=df_bt.index, y=cum_returns, mode='lines', name='العائد الاستراتيجي', line=dict(color='#00FFA3', width=2)))
             fig_bt.update_layout(template="plotly_dark", height=400, title="منحنى العائد التراكمي للاستراتيجية")
             st.plotly_chart(fig_bt, width='stretch')
+        else:
+            st.error(f"تعذر جلب البيانات للرمز '{bt_symbol}'.")
 
 elif app_mode == "👥 شبكة التداول الاجتماعي ولوحة المتصدرين (Social & Copy Trading)":
     st.title("👥 شبكة التداول الاجتماعي ولوحة المتصدرين (Leaderboard)")
-    st.markdown("شارك ملاحظاتك وصفقاتك مع مجتمع المتداولين الكميين وتصفح أفضل الأداء.")
-    
     post_content = st.text_area("أكتب تحليلك أو إشارتك لمشاركتها مع المجتمع:")
     if st.button("📢 نشر في المجتمع"):
         if post_content.strip():
@@ -365,18 +360,20 @@ elif app_mode == "👥 شبكة التداول الاجتماعي ولوحة ا�
 elif app_mode == "🛡️ درع حماية المحفظة وحساب القيمة المعرضة للمخاطر (VaR)":
     st.title("🛡️ إدارة المخاطر المؤسسية وحساب القيمة المعرضة للمخاطر (VaR)")
     df_var = load_and_process_data(crypto_symbol)
-    if df_var is not None:
+    if df_var is not None and not df_var.empty:
         portfolio_val = st.number_input("قيمة المحفظة الإجمالية ($):", value=50000.0, step=1000.0)
         daily_returns = df_var['Price_Change'].dropna()
         var_95 = np.percentile(daily_returns, 5) * portfolio_val
         
         st.success("نتائج تحليل القيمة المعرضة للمخاطر (Value at Risk - 95% Confidence):")
         st.metric("أقصى خسارة متوقعة خلال يوم واحد (95%)", f"${abs(var_95):,.2f}")
+    else:
+        st.error(f"تعذر جلب البيانات للرمز '{crypto_symbol}'.")
 
 elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)":
     st.title("🧮 حاسبة إدارة المخاطر المتقدمة (Position Sizing & Risk Management)")
     df_rc = load_and_process_data(crypto_symbol)
-    if df_rc is not None:
+    if df_rc is not None and not df_rc.empty:
         curr_p = float(df_rc['Close'].iloc[-1])
         curr_atr = float(df_rc['ATR_Val'].iloc[-1])
         
@@ -398,13 +395,15 @@ elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المرك�
         m2.metric("مسافة وقف الخسارة", f"${calculated_sl_distance:,.2f}")
         m3.metric("الكمية الموصى بها", f"{recommended_qty:.4f}")
         m4.metric("إجمالي تكلفة المركز", f"${total_position_cost:,.2f}")
+    else:
+        st.error(f"تعذر جلب البيانات للرمز '{crypto_symbol}'.")
 
 elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML Lab)":
     st.title("🧪 مختبر النماذج المتقدم وتحسين الـ Hyperparameters")
     lab_symbol = st.text_input("رمز الأصل للاختبار:", value="TAO-USD")
     if st.button("🚀 تشغيل الاختبار والتدريب المتقدم"):
         df_lb = load_and_process_data(lab_symbol)
-        if df_lb is not None:
+        if df_lb is not None and not df_lb.empty:
             cl_l = df_lb.dropna()
             X_l = np.nan_to_num(np.ascontiguousarray(cl_l[advanced_features].astype(float).values), nan=0.0)
             y_l = (cl_l['Close'].shift(-1) > cl_l['Close']).astype(int).values
@@ -415,10 +414,11 @@ elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML L
             
             st.success(f"تم التدريب باستخدام خوارزمية ({model_algo_choice}) بنجاح!")
             st.metric("دقة النموذج على البيانات التاريخية", f"{acc:.2f}%")
+        else:
+            st.error(f"تعذر جلب البيانات للرمز '{lab_symbol}'.")
 
 elif app_mode == "📡 مركز التنبيهات والربط الخارجي (Telegram & Webhooks)":
     st.title("📡 مركز التنبيهات والربط الآلي (Telegram Bot & Webhooks)")
-    st.markdown("قم بإعداد بوت التيليجرام لتلقي الإشارات الفورية.")
     tg_token = st.text_input("مفتاح بوت التيليجرام (Bot Token):", type="password")
     tg_chat = st.text_input("معرف الدردشة (Chat ID):")
     if st.button("💾 حفظ الإعدادات"):
@@ -432,10 +432,12 @@ elif app_mode == "خريطة السيولة ونقاط التصفية (Liquidati
     hm_symbol = st.text_input("رمز الأصل لخريطة السيولة:", value="TAO-USD")
     if st.button("🗺️ توليد خريطة السيولة"):
         df_hm = load_and_process_data(hm_symbol)
-        if df_hm is not None:
+        if df_hm is not None and not df_hm.empty:
             fig_hm = go.Figure(go.Scatter(x=df_hm.index[-60:], y=df_hm['Close'].iloc[-60:], mode='lines+markers', line=dict(color='#FF007A', width=3)))
             fig_hm.update_layout(template="plotly_dark", height=450)
             st.plotly_chart(fig_hm, width='stretch')
+        else:
+            st.error(f"تعذر جلب البيانات للرمز '{hm_symbol}'.")
 
 elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal & PnL)":
     st.title("📈 سجل الصفقات ومنحنى الأداء الحي (Trade Journal & Export)")
@@ -486,14 +488,14 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
         if res:
             st.table(pd.DataFrame(res))
         else:
-            st.warning("لم يتم العثور على بيانات كافية للأصول المدخلة.")
+            st.warning("لم يتم العثور على بيانات كافية للأصول المدخلة أو حدث انقطاع مؤقت في جلب البيانات.")
 
 else:
     with st.spinner(f"جاري معالجة بيانات الأصل '{crypto_symbol}' بالذكاء الاصطناعي..."):
         data = load_and_process_data(crypto_symbol, rsi_window=rsi_period_input)
 
     if data is None or data.empty:
-        st.error(f"⚠️ عذراً، تعذر جلب البيانات للرمز '{crypto_symbol}'.")
+        st.error(f"⚠️ عذراً، تعذر جلب البيانات للرمز '{crypto_symbol}'. يرجى التحقق من صحة الرمز (مثلاً TAO-USD أو BTC-USD) أو المحاولة لاحقاً.")
     else:
         clean_data = data.dropna()
         X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0)
