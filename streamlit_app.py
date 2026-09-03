@@ -5,7 +5,6 @@ import numpy as np
 import requests
 from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
-import xml.etree.ElementTree as ET
 import sqlite3
 import hashlib
 import plotly.graph_objects as go
@@ -13,7 +12,7 @@ import plotly.express as px
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title="Global Quant SaaS Platform - Ultra Institutional AI Edition",
+    page_title="Global Quant SaaS Platform - Autonomous AI Edition",
     page_icon="⚡",
     layout="wide"
 )
@@ -216,7 +215,8 @@ def load_and_process_data(symbol, rsi_window=14):
         low_close = np.abs(data['Low'] - data['Close'].shift())
         ranges = pd.concat([high_low, high_close, low_close], axis=1)
         true_range = ranges.max(axis=1)
-        data['ATR'] = true_range.rolling(14).mean() / data['Close']
+        data['ATR_Val'] = true_range.rolling(14).mean()
+        data['ATR'] = data['ATR_Val'] / data['Close']
         
         plus_dm = data['High'].diff()
         minus_dm = data['Low'].diff()
@@ -234,7 +234,11 @@ def load_and_process_data(symbol, rsi_window=14):
         data['BB_Upper'] = data['BB_Middle'] + (data['BB_Std'] * 2)
         data['BB_Lower'] = data['BB_Middle'] - (data['BB_Std'] * 2)
         
-        # محرك تقدير وتصفيات السيولة
+        # محرك كشف تجميع الحيتان والسيولة المفاجئة (Whale Volume Spike)
+        vol_mean = data['Volume'].rolling(30).mean()
+        data['Volume_Spike'] = data['Volume'] / (vol_mean + 1e-9)
+        
+        # تقدير وتصفيات السيولة
         data['Estimated_Liquidations'] = (data['Volume'] * np.abs(data['Price_Change']) * data['VIX']).rolling(5).mean()
         liq_min = data['Estimated_Liquidations'].min()
         liq_max = data['Estimated_Liquidations'].max()
@@ -257,7 +261,7 @@ def load_and_process_data(symbol, rsi_window=14):
 advanced_features = [
     'Price_Change', 'Volume_Change', 'Lag_1', 'Lag_2',
     'SMA_Ratio', 'RSI', 'ATR', 'ADX', 'Liquidation_Index', 'Stochastic_K', 
-    'Fear_Greed_Index', 'VIX', 'MACD', 'MACD_Signal'
+    'Fear_Greed_Index', 'VIX', 'MACD', 'MACD_Signal', 'Volume_Spike'
 ]
 
 if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاطر":
@@ -330,7 +334,6 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
             
             st.markdown("---")
             st.subheader("⚖️ الأوزان المثالية للمحفظة (Sharpe Ratio MPT Optimization)")
-            # محاكاة تعظيم نسبة شارپ للأوزان المثالية
             mean_returns = returns_df.mean()
             cov_matrix = returns_df.cov()
             num_assets = len(returns_df.columns)
@@ -358,7 +361,7 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
         st.warning("لم يتم العثور على بيانات كافية.")
 
 else:
-    with st.spinner(f"جاري تشغيل النماذج المدمجة وتحليل قياس المخاطر VaR لـ {crypto_symbol}..."):
+    with st.spinner(f"جاري تشغيل النماذج الذكية والأهداف الديناميكية لـ {crypto_symbol}..."):
         data = load_and_process_data(crypto_symbol, rsi_window=rsi_period_input)
 
     if data is None or data.empty:
@@ -387,10 +390,23 @@ else:
         current_price = float(data['Close'].iloc[-1])
         current_vix = float(data['VIX'].iloc[-1])
         current_rsi = float(data['RSI'].iloc[-1])
-        current_atr = float(data['ATR'].iloc[-1])
+        current_atr_val = float(data['ATR_Val'].iloc[-1])
         current_adx = float(data['ADX'].iloc[-1])
         current_liq = float(data['Liquidation_Index'].iloc[-1])
+        current_spike = float(data['Volume_Spike'].iloc[-1])
         
+        # حساب الأهداف الديناميكية ووقف الخسارة (Dynamic SL & TP Matrix)
+        if prediction == 1:
+            sl_price = current_price - (1.5 * current_atr_val)
+            tp1_price = current_price + (1.0 * current_atr_val)
+            tp2_price = current_price + (2.0 * current_atr_val)
+            tp3_price = current_price + (3.0 * current_atr_val)
+        else:
+            sl_price = current_price + (1.5 * current_atr_val)
+            tp1_price = current_price - (1.0 * current_atr_val)
+            tp2_price = current_price - (2.0 * current_atr_val)
+            tp3_price = current_price - (3.0 * current_atr_val)
+
         # اكتشاف نظام السوق التلقائي
         sma_200_val = data['Close'].rolling(50).mean().iloc[-1]
         if current_adx > 30 and current_price > sma_200_val:
@@ -402,18 +418,17 @@ else:
         else:
             market_regime = "⚖️ تذبذب ونطاق جانبي (Sideways / Consolidation)"
 
-        # حساب القيمة المعرضة للخطر (Value at Risk - VaR 95%) وإدارة المخاطر
+        # حساب VaR و Max Drawdown
         returns_series = data['Price_Change'].dropna()
         var_95 = np.percentile(returns_series, 5) * 100
         max_dd = ((data['Close'] / data['Close'].cummax()) - 1).min() * 100
 
-        # معيار كيلي لتخصيص رأس المال
         win_prob = max_prob
         loss_prob = 1.0 - win_prob
         kelly_fraction = max(0.0, win_prob - (loss_prob / 2.0)) * 100
 
-        st.title(f"🧠 المنصة المؤسسية للذكاء الاصطناعي والمخاطر لـ {crypto_symbol}")
-        st.caption("مدعومة بنماذج مدمجة متقدمة وقياس القيمة المعرضة للخطر (VaR) وأوزان شارپ.")
+        st.title(f"🧠 المنصة المؤسسية المستقلة لـ {crypto_symbol}")
+        st.caption("مدعومة بالأهداف الديناميكية المتعددة، كشف تجميع الحيتان، وقياس المخاطر الشامل.")
         st.markdown("---")
 
         col1, col2, col3, col4 = st.columns(4)
@@ -425,26 +440,41 @@ else:
             st.metric(label="📊 قوة الاتجاه (ADX)", value=f"{current_adx:.1f}")
         with col4:
             if current_adx < 20:
-                st.metric(label="🔮 قرار النظام المؤسسي", value="⚠️ تذبذب عشوائي", delta="تجنب", delta_color="off")
+                st.metric(label="🔮 قرار النظام المستقل", value="⚠️ تذبذب عشوائي", delta="تجنب", delta_color="off")
             elif max_prob < conf_threshold_input:
-                st.metric(label="🔮 قرار النظام المؤسسي", value="⚠️ ترقب (حياد)", delta=f"الثقة المشتركة: {max_prob*100:.1f}%")
+                st.metric(label="🔮 قرار النظام المستقل", value="⚠️ ترقب (حياد)", delta=f"الثقة المشتركة: {max_prob*100:.1f}%")
             elif prediction == 1:
-                st.metric(label="🔮 قرار النظام المؤسسي", value="📈 شراء (صعود)", delta=f"الثقة المشتركة: {max_prob*100:.1f}%")
+                st.metric(label="🔮 قرار النظام المستقل", value="📈 شراء (صعود)", delta=f"الثقة المشتركة: {max_prob*100:.1f}%")
             else:
-                st.metric(label="🔮 قرار النظام المؤسسي", value="📉 بيع / تجنب", delta=f"الثقة المشتركة: {max_prob*100:.1f}%", delta_color="inverse")
+                st.metric(label="🔮 قرار النظام المستقل", value="📉 بيع / تجنب", delta=f"الثقة المشتركة: {max_prob*100:.1f}%", delta_color="inverse")
 
-        # قسم التوصيات والمخاطر المتقدمة
+        # قسم مصفوفة الأهداف الديناميكية ووقف الخسارة
+        st.markdown("---")
+        st.subheader("🎯 مصفوفة الأهداف الديناميكية ووقف الخسارة (Dynamic SL & TP Matrix)")
+        t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
+        with t_col1:
+            st.metric(label="🛑 وقف الخسارة المقترح", value=f"${sl_price:,.2f}")
+        with t_col2:
+            st.metric(label="🎯 الهدف الأول (TP1)", value=f"${tp1_price:,.2f}")
+        with t_col3:
+            st.metric(label="🎯 الهدف الثاني (TP2)", value=f"${tp2_price:,.2f}")
+        with t_col4:
+            st.metric(label="🎯 الهدف الثالث (TP3)", value=f"${tp3_price:,.2f}")
+        with t_col5:
+            spike_status = "🔥 نشاط حيتان عالي" if current_spike > 1.5 else "⚖️ حجم تداول طبيعي"
+            st.metric(label="🐋 مؤشر تجميع الحيتان", value=spike_status, delta=f"{current_spike:.2f}x")
+
         st.markdown("---")
         col_m1, col_m2, col_m3 = st.columns(3)
         with col_m1:
             st.subheader("💡 توصية معيار كيلي")
-            st.info(f"النسبة المقترحة للمخاطرة برأس المال بناءً على ثقة النماذج (**{max_prob*100:.1f}%**) هي: **{kelly_fraction:.1f}%**.")
+            st.info(f"النسبة المقترحة للمخاطرة برأس المال بناءً على الثقة (**{max_prob*100:.1f}%**) هي: **{kelly_fraction:.1f}%**.")
         with col_m2:
             st.subheader("🛡️ قياس المخاطر (VaR 95%)")
-            st.warning(f"القيمة المعرضة للخطر اليومي بمستوى ثقة 95%: **{var_95:.2f}%** كحد أقصى متوقع للتحرك العكسي.")
+            st.warning(f"القيمة المعرضة للخطر اليومي بمستوى ثقة 95%: **{var_95:.2f}%** كحد أقصى.")
         with col_m3:
             st.subheader("📉 أسوأ تراجع تاريخي (Max DD)")
-            st.error(f"أكبر هبوط تاريخي متتالي سُجل للأصل في عينة البيانات: **{max_dd:.2f}%**.")
+            st.error(f"أكبر هبوط تاريخي متتالي سُجل للأصل: **{max_dd:.2f}%**.")
 
         st.markdown("---")
         st.subheader("📈 الرسم البياني التفاعلي ومناطق السيولة")
