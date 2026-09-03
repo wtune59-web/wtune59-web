@@ -10,7 +10,7 @@ import hashlib
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title="Global Quant SaaS Platform - Institutional Edition",
+    page_title="Global Quant SaaS Platform - Elite Edition",
     page_icon="⚡",
     layout="wide"
 )
@@ -115,9 +115,9 @@ if st.sidebar.button("تسجيل الخروج"):
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.title("⚡ لوحة التحكم المؤسسية")
+st.sidebar.title("⚡ لوحة التحكم النخبوية")
 
-app_mode = st.sidebar.radio("🧭 وضع المنصة:", ["تحليل فردي معمق", "مصفوفة مقارنة الأصول (Multi-Asset)"])
+app_mode = st.sidebar.radio("🧭 وضع المنصة:", ["تحليل فردي معمق", "مصفوفة مقارنة الأصول وإدارة المخاطر"])
 
 crypto_symbol = "BTC-USD"
 if app_mode == "تحليل فردي معمق":
@@ -139,7 +139,7 @@ st.sidebar.header("💡 شراكات المنصات")
 st.sidebar.markdown("[🔗 سجل في Binance واحصل على خصم](https://accounts.binance.com/register?ref=YOUR_REF_ID)")
 
 
-# --- دوال جلب البيانات العالمية والمؤسسية ---
+# --- دوال جلب البيانات والمؤشرات ---
 @st.cache_data(ttl=3600)
 def get_fear_and_greed():
     try:
@@ -176,7 +176,6 @@ def load_and_process_data(symbol):
         data = data.reset_index()
         data['Date'] = pd.to_datetime(data['Date']).dt.strftime('%Y-%m-%d')
         
-        # دمج مؤشر الخوف والجشع
         fng_df = get_fear_and_greed()
         if fng_df is not None:
             data = pd.merge(data, fng_df, on='Date', how='left')
@@ -184,7 +183,6 @@ def load_and_process_data(symbol):
         else:
             data['Fear_Greed_Index'] = 50
 
-        # دمج مؤشر التقلب العالمي VIX
         vix_df = get_vix_data()
         if vix_df is not None:
             data = pd.merge(data, vix_df, on='Date', how='left')
@@ -194,7 +192,6 @@ def load_and_process_data(symbol):
             
         data.set_index('Date', inplace=True)
         
-        # الهندسة الرياضية والمؤشرات المتقدمة لرفع دقة التوقع
         data['Price_Change'] = data['Close'].pct_change()
         data['Volume_Change'] = data['Volume'].pct_change()
         data['Lag_1'] = data['Price_Change'].shift(1)
@@ -205,14 +202,12 @@ def load_and_process_data(symbol):
         data['SMA_30'] = data['Close'].rolling(30).mean()
         data['SMA_Ratio'] = data['SMA_10'] / data['SMA_30']
         
-        # RSI
         delta = data['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
         rs = gain / loss
         data['RSI'] = 100 - (100 / (1 + rs))
         
-        # ATR (Average True Range) لقياس تقلبات السوق والخطورة
         high_low = data['High'] - data['Low']
         high_close = np.abs(data['High'] - data['Close'].shift())
         low_close = np.abs(data['Low'] - data['Close'].shift())
@@ -220,22 +215,18 @@ def load_and_process_data(symbol):
         true_range = ranges.max(axis=1)
         data['ATR'] = true_range.rolling(14).mean() / data['Close']
         
-        # Stochastic Oscillator لقياس الزخم
         low_14 = data['Low'].rolling(14).min()
         high_14 = data['High'].rolling(14).max()
         data['Stochastic_K'] = 100 * (data['Close'] - low_14) / (high_14 - low_14 + 1e-9)
         
-        # Volume Liquidity Ratio
         data['Vol_Ratio'] = data['Volume'] / (data['Volume'].rolling(20).mean() + 1e-9)
         
-        # Bollinger Bands
         data['BB_Middle'] = data['Close'].rolling(20).mean()
         data['BB_Std'] = data['Close'].rolling(20).std()
         data['BB_Upper'] = data['BB_Middle'] + (data['BB_Std'] * 2)
         data['BB_Lower'] = data['BB_Middle'] - (data['BB_Std'] * 2)
         data['BB_Width'] = (data['BB_Upper'] - data['BB_Lower']) / data['BB_Middle']
         
-        # MACD
         exp1 = data['Close'].ewm(span=12, adjust=False).mean()
         exp2 = data['Close'].ewm(span=26, adjust=False).mean()
         data['MACD'] = exp1 - exp2
@@ -274,7 +265,6 @@ def get_news_sentiment(symbol):
         return "محايد ⚪", ["تعذر جلب الأخبار الحية."]
 
 
-# قائمة الميزات المتقدمة الشاملة للنموذج المؤسسي
 advanced_features = [
     'Price_Change', 'Volume_Change', 'Lag_1', 'Lag_2', 'Lag_3',
     'SMA_Ratio', 'RSI', 'ATR', 'Stochastic_K', 'Vol_Ratio', 
@@ -301,20 +291,27 @@ def analyze_asset_fast(asset):
             
             decision = "📈 شراء (صعود)" if pred_c == 1 and max_p >= 0.58 else ("📉 بيع / تجنب" if pred_c == 0 and max_p >= 0.58 else "⚠️ ترقب (حياد)")
             
+            current_px = float(df_asset['Close'].iloc[-1])
+            atr_val = float(df_asset['ATR'].iloc[-1])
+            stop_loss = current_px * (1 - (atr_val * 1.5))
+            take_profit = current_px * (1 + (atr_val * 2.5))
+            
             return {
                 "الأصل": asset,
-                "السعر الحالي ($)": f"${float(df_asset['Close'].iloc[-1]):,.2f}",
+                "السعر الحالي ($)": f"${current_px:,.2f}",
                 "مؤشر RSI": f"{float(df_asset['RSI'].iloc[-1]):.1f}",
-                "مؤشر ATR": f"{float(df_asset['ATR'].iloc[-1])*100:.2f}%",
+                "وقف الخسارة المقترح": f"${stop_loss:,.2f}",
+                "جني الأرباح المقترح": f"${take_profit:,.2f}",
                 "قرار النظام": decision,
-                "نسبة الثقة": f"{max_p*100:.1f}%"
+                "نسبة الثقة": f"{max_p*100:.1f}%",
+                "Close_Price": current_px
             }
     return None
 
 
-if app_mode == "مصفوفة مقارنة الأصول (Multi-Asset)":
-    st.title("📊 مصفوفة المقارنة المؤسسية متعددة الأصول")
-    st.caption("تحليل مدعوم بمؤشرات الـ VIX العالمية والتقلبات المتقدمة ATR و Stochastic.")
+if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاطر":
+    st.title("📊 مصفوفة المقارنة المؤسسية وإدارة المخاطر (MPT & Correlation)")
+    st.caption("أدوات متطورة لحساب الأوزان المثالية، معاملات الارتباط، وتوصيات إدارة المخاطر الآلية.")
     st.markdown("---")
     
     default_watchlist = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AAPL", "TSLA"]
@@ -322,14 +319,46 @@ if app_mode == "مصفوفة مقارنة الأصول (Multi-Asset)":
     assets = [a.strip().upper() for a in watchlist_input.split(',')]
     
     comparison_data = []
-    with st.spinner("جاري تشغيل محرك الذكاء الاصطناعي المؤسسي..."):
+    price_series_dict = {}
+    
+    with st.spinner("جاري تحليل الأصول وحساب مصفوفة المخاطر والارتباط..."):
         for asset in assets:
             res = analyze_asset_fast(asset)
             if res:
-                comparison_data.append(res)
+                df_temp = load_and_process_data(asset)
+                if df_temp is not None and not df_temp.empty:
+                    price_series_dict[asset] = df_temp['Close']
+                comparison_data.append({k: v for k, v in res.items() if k != "Close_Price"})
                 
     if comparison_data:
+        st.subheader("📋 جدول القرارات وإدارة المخاطر (Stop-Loss & Take-Profit)")
         st.table(pd.DataFrame(comparison_data))
+        
+        # --- مصفوفة الارتباط (Correlation Matrix) ---
+        if len(price_series_dict) > 1:
+            st.markdown("---")
+            st.subheader("🔗 مصفوفة الارتباط بين الأصول (Correlation Matrix)")
+            st.caption("تجنب شراء أصول ذات ارتباط تام لتقليل المخاطر الجهازية للمحفظة.")
+            prices_df = pd.DataFrame(price_series_dict).dropna()
+            returns_df = prices_df.pct_change().dropna()
+            corr_matrix = returns_df.corr()
+            st.dataframe(corr_matrix.style.background_gradient(cmap="coolwarm", axis=None))
+            
+            # --- تحسين المحفظة الحديثة (Modern Portfolio Theory - MPT) الأوزان المثالية ---
+            st.markdown("---")
+            st.subheader("⚖️ الأوزان المثالية للمحفظة (نظرياً بناءً على العائد والتقلب)")
+            num_assets = len(returns_df.columns)
+            if num_assets > 0:
+                # خوارزمية مبسطة لحساب الأوزان المعكوسة للتقلب (Inverse Volatility Weights)
+                volatilities = returns_df.std()
+                inv_vol = 1.0 / (volatilities + 1e-9)
+                weights = inv_vol / inv_vol.sum()
+                
+                weights_df = pd.DataFrame({
+                    "الأصل": weights.index,
+                    "الوزن المقترح بالمحفظة (%)": (weights.values * 100).round(2)
+                }).reset_index(drop=True)
+                st.table(weights_df)
     else:
         st.warning("لم يتم العثور على بيانات كافية للأصول المدخلة.")
 
@@ -357,21 +386,25 @@ else:
         current_fng = int(data['Fear_Greed_Index'].iloc[-1])
         current_vix = float(data['VIX'].iloc[-1])
         current_rsi = float(data['RSI'].iloc[-1])
-        current_atr = float(data['ATR'].iloc[-1]) * 100
+        current_atr = float(data['ATR'].iloc[-1])
+        
+        stop_loss_val = current_price * (1 - (current_atr * 1.5))
+        take_profit_val = current_price * (1 + (current_atr * 2.5))
+        
         max_prob = max(probabilities)
         confidence_threshold = 0.58
 
         st.title(f"🧠 منصة التحليل المعرفي المؤسسي لـ {crypto_symbol}")
-        st.caption("مدعوم بنماذج XGBoost مع محركات VIX والتقلبات المتقدمة.")
+        st.caption("مدعوم بنماذج XGBoost مع محركات إدارة المخاطر الآلية.")
         st.markdown("---")
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric(label="💵 السعر الحالي", value=f"${current_price:,.2f}")
         with col2:
-            st.metric(label="📉 تقلب السوق (VIX)", value=f"{current_vix:.1f}")
+            st.metric(label="🛑 وقف الخسارة المقترح", value=f"${stop_loss_val:,.2f}")
         with col3:
-            st.metric(label="😨 الخوف والجشع", value=f"{current_fng} / 100")
+            st.metric(label="🎯 جني الأرباح المقترح", value=f"${take_profit_val:,.2f}")
         with col4:
             if max_prob < confidence_threshold:
                 st.metric(label="🔮 قرار النظام", value="⚠️ حياد (ترقب)", delta=f"الثقة: {max_prob*100:.1f}%")
@@ -383,9 +416,9 @@ else:
         st.markdown("---")
         st.subheader("📝 التقرير الاستشاري التفسيري المؤسسي")
         st.markdown(f"""
-        > * **التقلبات والمخاطر (ATR):** معدل التحرك المتوقع للأصل يقدر بـ **{current_atr:.2f}%**، مما يساعد في قياس مستويات المخاطرة الحالية بدقة.
-        > * **المؤشرات الفنية والزخم:** مؤشر القوة النسبية RSI يسجل **{current_rsi:.1f}**، مع تقييم مؤشر الخوف والجشع العام **{current_fng}/100** ومؤشر التقلب العالمي VIX بقيمة **{current_vix:.1f}**.
-        > * **الخلاصة المؤسسية:** بلغت نسبة ثقة نموذج الـ XGBoost المعزز بـ 15 مؤشراً فرعياً **{max_prob*100:.1f}%**، والقرار المعتمد للمحفظة هو: **{"شراء" if prediction == 1 and max_prob >= confidence_threshold else ("بيع" if prediction == 0 and max_prob >= confidence_threshold else "ترقب وحياد")}**.
+        > * **إدارة المخاطر والصفقة:** بناءً على مؤشر ATR الحالي، تم حساب سعر **وقف الخسارة عند ${stop_loss_val:,.2f}** و**هدف جني الأرباح عند ${take_profit_val:,.2f}** لحماية رأس المال.
+        > * **المؤشرات الفنية:** مؤشر القوة النسبية RSI يسجل **{current_rsi:.1f}**، مع تقييم مؤشر الخوف والجشع **{current_fng}/100** ومؤشر التقلب العالمي VIX بقيمة **{current_vix:.1f}**.
+        > * **الخلاصة المؤسسية:** بلغت نسبة ثقة نموذج الـ XGBoost المعزز **{max_prob*100:.1f}%**، والقرار المعتمد للمحفظة هو: **{"شراء" if prediction == 1 and max_prob >= confidence_threshold else ("بيع" if prediction == 0 and max_prob >= confidence_threshold else "ترقب وحياد")}**.
         """)
 
         st.markdown("---")
