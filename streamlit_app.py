@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 import datetime
 import uuid
-import json
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
@@ -326,7 +325,7 @@ if app_mode == "🧠 غرفة تحليل المشاعر والذعر الجمع�
             gauge = {'axis': {'range': [None, 100]}, 'steps': [{'range': [0, 25], 'color': "darkred"}, {'range': [75, 100], 'color': "green"}]}
         ))
         fig_sent.update_layout(height=400, template="plotly_dark")
-        st.plotly_chart(fig_sent, use_container_width=True)
+        st.plotly_chart(fig_sent, width='stretch')
 
 elif app_mode == "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)":
     st.title("🛡️ درع حماية المحفظة عبر نظرية الفوضى (Chaos Theory & Fractal Shield)")
@@ -337,7 +336,7 @@ elif app_mode == "🛡️ درع حماية المحفظة بنظرية الفو
         fig_ch = go.Figure()
         fig_ch.add_trace(go.Scatter(x=df_chaos.index[-90:], y=df_chaos['Fractal_Fragility'].iloc[-90:], mode='lines', line=dict(color='#FF3366', width=2)))
         fig_ch.update_layout(template="plotly_dark", title="معدل الفوضى الفراكتلية", height=400)
-        st.plotly_chart(fig_ch, use_container_width=True)
+        st.plotly_chart(fig_ch, width='stretch')
 
 elif app_mode == "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting":
     st.title("🎭 كاشف فخاخ صناع السوق ومناطق اصطياد الوقف (Stop-Hunting Zones)")
@@ -348,7 +347,7 @@ elif app_mode == "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunt
         fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Upper'].iloc[-50:], mode='lines', name='فخ البائعين', line=dict(color='red', dash='dash')))
         fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Lower'].iloc[-50:], mode='lines', name='فخ المشترين', line=dict(color='blue', dash='dash')))
         fig_sh.update_layout(template="plotly_dark", height=450)
-        st.plotly_chart(fig_sh, use_container_width=True)
+        st.plotly_chart(fig_sh, width='stretch')
 
 elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)":
     st.title("🧮 حاسبة إدارة المخاطر المتقدمة (Position Sizing & Risk Management)")
@@ -417,13 +416,13 @@ elif app_mode == "خريطة السيولة ونقاط التصفية (Liquidati
         if df_hm is not None:
             fig_hm = go.Figure(go.Scatter(x=df_hm.index[-60:], y=df_hm['Close'].iloc[-60:], mode='lines+markers', line=dict(color='#FF007A', width=3)))
             fig_hm.update_layout(template="plotly_dark", height=450)
-            st.plotly_chart(fig_hm, use_container_width=True)
+            st.plotly_chart(fig_hm, width='stretch')
 
 elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal & PnL)":
     st.title("📈 سجل الصفقات ومنحنى الأداء الحي (Trade Journal & Export)")
     trades_df = get_trade_journal(st.session_state['username'])
     if not trades_df.empty:
-        st.dataframe(trades_df, use_container_width=True)
+        st.dataframe(trades_df, width='stretch')
         csv_data = trades_df.to_csv(index=False).encode('utf-8')
         st.download_button("📥 تصدير السجل كملف CSV", data=csv_data, file_name="trade_journal.csv", mime="text/csv")
     else:
@@ -474,7 +473,7 @@ elif app_mode == "مصفوفة مقارنة الأسواق والـ MPT":
         pdf = pd.DataFrame(price_dict).dropna()
         rets = pdf.pct_change().dropna()
         st.subheader("🔗 مصفوفة الارتباط")
-        st.plotly_chart(px.imshow(rets.corr(), text_auto=True, color_continuous_scale="RdBu_r", aspect="auto"), use_container_width=True)
+        st.plotly_chart(px.imshow(rets.corr(), text_auto=True, color_continuous_scale="RdBu_r", aspect="auto"), width='stretch')
 
 else:
     with st.spinner(f"جاري معالجة بيانات الأصل '{crypto_symbol}' بالذكاء الاصطناعي..."):
@@ -543,4 +542,4 @@ else:
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='السعر', line=dict(color='#00FFA3', width=2)))
         fig.update_layout(template="plotly_dark", height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
