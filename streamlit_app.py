@@ -13,7 +13,7 @@ import plotly.express as px
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title="Global Quant SaaS Platform - Institutional AI Edition",
+    page_title="Global Quant SaaS Platform - Ultra Institutional AI Edition",
     page_icon="⚡",
     layout="wide"
 )
@@ -123,7 +123,7 @@ st.sidebar.title("⚡ لوحة التحكم والذكاء الاصطناعي")
 app_mode = st.sidebar.radio("🧭 وضع المنصة:", ["تحليل فردي معمق", "مصفوفة مقارنة الأصول وإدارة المخاطر"])
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🎛️ تخصيص محرك المؤسسات")
+st.sidebar.subheader("🎛️ تخصيص محرك الصناديق")
 conf_threshold_input = st.sidebar.slider("عتبة الثقة المطلوبة (Confidence %):", min_value=50, max_value=85, value=60, step=5) / 100.0
 rsi_period_input = st.sidebar.slider("فترة مؤشر الزخم (RSI Period):", min_value=7, max_value=28, value=14, step=1)
 
@@ -234,7 +234,7 @@ def load_and_process_data(symbol, rsi_window=14):
         data['BB_Upper'] = data['BB_Middle'] + (data['BB_Std'] * 2)
         data['BB_Lower'] = data['BB_Middle'] - (data['BB_Std'] * 2)
         
-        # محرك تقدير وتصفيات السيولة (Estimated Liquidation Index)
+        # محرك تقدير وتصفيات السيولة
         data['Estimated_Liquidations'] = (data['Volume'] * np.abs(data['Price_Change']) * data['VIX']).rolling(5).mean()
         liq_min = data['Estimated_Liquidations'].min()
         liq_max = data['Estimated_Liquidations'].max()
@@ -261,8 +261,8 @@ advanced_features = [
 ]
 
 if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاطر":
-    st.title("📊 مصفوفة مقارنة الأصول ونظام الذكاء الاصطناعي المؤسسي")
-    st.caption("تحليل مؤسسي متعدد الأصول يعتمد على نماذج مدمجة (Ensemble Models) لتحديد النطاق والسيولة.")
+    st.title("📊 مصفوفة مقارنة الأصول وتحسين المحافظ الحديثة (MPT)")
+    st.caption("تحليل مؤسسي متعدد الأصول يعتمد على النماذج المدمجة ومحفظة ماركويتز الرياضية.")
     st.markdown("---")
     
     default_watchlist = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AAPL", "TSLA"]
@@ -272,7 +272,7 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
     comparison_data = []
     price_series_dict = {}
     
-    with st.spinner("جاري تشغيل محرك النماذج المدمجة والارتباط..."):
+    with st.spinner("جاري تشغيل النماذج المدمجة وخوارزميات MPT..."):
         for asset in assets:
             df_asset = load_and_process_data(asset, rsi_window=rsi_period_input)
             if df_asset is not None and not df_asset.empty:
@@ -282,7 +282,6 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
                     y_c = (clean['Close'].shift(-1) > clean['Close']).astype(int)
                     valid = y_c.dropna().index
                     
-                    # نموذج مدمج مؤسسي
                     xgb_c = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.02, random_state=42)
                     rf_c = RandomForestClassifier(n_estimators=100, max_depth=4, random_state=42)
                     
@@ -328,11 +327,38 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
             
             fig_corr = px.imshow(corr_matrix, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
             st.plotly_chart(fig_corr, use_container_width=True)
+            
+            st.markdown("---")
+            st.subheader("⚖️ الأوزان المثالية للمحفظة (Sharpe Ratio MPT Optimization)")
+            # محاكاة تعظيم نسبة شارپ للأوزان المثالية
+            mean_returns = returns_df.mean()
+            cov_matrix = returns_df.cov()
+            num_assets = len(returns_df.columns)
+            
+            np.random.seed(42)
+            best_sharpe = -999
+            best_weights = np.ones(num_assets) / num_assets
+            
+            for _ in range(10000):
+                w = np.random.random(num_assets)
+                w /= np.sum(w)
+                ret = np.dot(w, mean_returns) * 252
+                vol = np.sqrt(np.dot(w.T, np.dot(cov_matrix * 252, w)))
+                sharpe = ret / (vol + 1e-9)
+                if sharpe > best_sharpe:
+                    best_sharpe = sharpe
+                    best_weights = w
+            
+            mpt_df = pd.DataFrame({
+                "الأصل": returns_df.columns,
+                "الوزن الأمثل الموصى به (%)": (best_weights * 100).round(2)
+            }).reset_index(drop=True)
+            st.table(mpt_df)
     else:
         st.warning("لم يتم العثور على بيانات كافية.")
 
 else:
-    with st.spinner(f"جاري تشغيل النماذج المدمجة الذكية وتحليل نظام السوق لـ {crypto_symbol}..."):
+    with st.spinner(f"جاري تشغيل النماذج المدمجة وتحليل قياس المخاطر VaR لـ {crypto_symbol}..."):
         data = load_and_process_data(crypto_symbol, rsi_window=rsi_period_input)
 
     if data is None or data.empty:
@@ -344,7 +370,6 @@ else:
         
         valid_idx = y.dropna().index
         
-        # تدريب النماذج بالتوازي (Ensemble: XGBoost + Random Forest)
         xgb_model = XGBClassifier(n_estimators=200, max_depth=4, learning_rate=0.01, subsample=0.8, random_state=42)
         rf_model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
         
@@ -355,7 +380,6 @@ else:
         prob_xgb = xgb_model.predict_proba(today_features)[0]
         prob_rf = rf_model.predict_proba(today_features)[0]
         
-        # دمج الاحتمالات لذكاء فائق ودقة مضاهاة الصناديق الكبرى
         ensemble_probs = (prob_xgb + prob_rf) / 2.0
         prediction = 1 if ensemble_probs[1] > ensemble_probs[0] else 0
         max_prob = max(ensemble_probs)
@@ -367,7 +391,7 @@ else:
         current_adx = float(data['ADX'].iloc[-1])
         current_liq = float(data['Liquidation_Index'].iloc[-1])
         
-        # كشف نظام السوق التلقائي (Market Regime Detection)
+        # اكتشاف نظام السوق التلقائي
         sma_200_val = data['Close'].rolling(50).mean().iloc[-1]
         if current_adx > 30 and current_price > sma_200_val:
             market_regime = "🚀 اتجاه صاعد قوي (Bull Trend)"
@@ -378,14 +402,18 @@ else:
         else:
             market_regime = "⚖️ تذبذب ونطاق جانبي (Sideways / Consolidation)"
 
-        # حساب معيار كيلي لتخصيص رأس المال (Kelly Criterion Capital Allocation)
+        # حساب القيمة المعرضة للخطر (Value at Risk - VaR 95%) وإدارة المخاطر
+        returns_series = data['Price_Change'].dropna()
+        var_95 = np.percentile(returns_series, 5) * 100
+        max_dd = ((data['Close'] / data['Close'].cummax()) - 1).min() * 100
+
+        # معيار كيلي لتخصيص رأس المال
         win_prob = max_prob
         loss_prob = 1.0 - win_prob
-        # افتراض نسبة الربح إلى الخسارة (Reward-to-Risk ratio = 2.0)
         kelly_fraction = max(0.0, win_prob - (loss_prob / 2.0)) * 100
 
-        st.title(f"🧠 المنصة المؤسسية للذكاء الاصطناعي والسيولة لـ {crypto_symbol}")
-        st.caption("مدعومة بمحرك النماذج المدمجة (Ensemble Learning) واكتشاف أنظمة السوق تلقائياً.")
+        st.title(f"🧠 المنصة المؤسسية للذكاء الاصطناعي والمخاطر لـ {crypto_symbol}")
+        st.caption("مدعومة بنماذج مدمجة متقدمة وقياس القيمة المعرضة للخطر (VaR) وأوزان شارپ.")
         st.markdown("---")
 
         col1, col2, col3, col4 = st.columns(4)
@@ -397,23 +425,26 @@ else:
             st.metric(label="📊 قوة الاتجاه (ADX)", value=f"{current_adx:.1f}")
         with col4:
             if current_adx < 20:
-                st.metric(label="🔮 قرار النظام المدمج", value="⚠️ تذبذب عشوائي", delta="تجنب", delta_color="off")
+                st.metric(label="🔮 قرار النظام المؤسسي", value="⚠️ تذبذب عشوائي", delta="تجنب", delta_color="off")
             elif max_prob < conf_threshold_input:
-                st.metric(label="🔮 قرار النظام المدمج", value="⚠️ ترقب (حياد)", delta=f"الثقة المشتركة: {max_prob*100:.1f}%")
+                st.metric(label="🔮 قرار النظام المؤسسي", value="⚠️ ترقب (حياد)", delta=f"الثقة المشتركة: {max_prob*100:.1f}%")
             elif prediction == 1:
-                st.metric(label="🔮 قرار النظام المدمج", value="📈 شراء (صعود)", delta=f"الثقة المشتركة: {max_prob*100:.1f}%")
+                st.metric(label="🔮 قرار النظام المؤسسي", value="📈 شراء (صعود)", delta=f"الثقة المشتركة: {max_prob*100:.1f}%")
             else:
-                st.metric(label="🔮 قرار النظام المدمج", value="📉 بيع / تجنب", delta=f"الثقة المشتركة: {max_prob*100:.1f}%", delta_color="inverse")
+                st.metric(label="🔮 قرار النظام المؤسسي", value="📉 بيع / تجنب", delta=f"الثقة المشتركة: {max_prob*100:.1f}%", delta_color="inverse")
 
-        # قسم التوصيات الذكية وتخصيص المال بمعيار كيلي
+        # قسم التوصيات والمخاطر المتقدمة
         st.markdown("---")
-        col_m1, col_m2 = st.columns(2)
+        col_m1, col_m2, col_m3 = st.columns(3)
         with col_m1:
-            st.subheader("💡 توصية إدارة المخاطر ومعيار كيلي")
-            st.info(f"بناءً على نسبة الثقة المشتركة للنماذج (**{max_prob*100:.1f}%**)، النسبة المقترحة من محفظتك للمخاطرة بهذه الصفقة طبقاً لـ **Kelly Criterion** هي: **{kelly_fraction:.1f}%** من رأس المال الإجمالي.")
+            st.subheader("💡 توصية معيار كيلي")
+            st.info(f"النسبة المقترحة للمخاطرة برأس المال بناءً على ثقة النماذج (**{max_prob*100:.1f}%**) هي: **{kelly_fraction:.1f}%**.")
         with col_m2:
-            st.subheader("🌊 ضغط وتصفيات الحيتان (Liquidation Index)")
-            st.metric(label="مؤشر فخاخ الرافعة المالية", value=f"{current_liq:.1f} / 100")
+            st.subheader("🛡️ قياس المخاطر (VaR 95%)")
+            st.warning(f"القيمة المعرضة للخطر اليومي بمستوى ثقة 95%: **{var_95:.2f}%** كحد أقصى متوقع للتحرك العكسي.")
+        with col_m3:
+            st.subheader("📉 أسوأ تراجع تاريخي (Max DD)")
+            st.error(f"أكبر هبوط تاريخي متتالي سُجل للأصل في عينة البيانات: **{max_dd:.2f}%**.")
 
         st.markdown("---")
         st.subheader("📈 الرسم البياني التفاعلي ومناطق السيولة")
