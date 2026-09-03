@@ -12,7 +12,7 @@ import plotly.express as px
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title="Global Quant SaaS Platform - Plotly Interactive Edition",
+    page_title="Global Quant SaaS Platform - Liquidations & Liquidity Edition",
     page_icon="⚡",
     layout="wide"
 )
@@ -117,11 +117,10 @@ if st.sidebar.button("تسجيل الخروج"):
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.title("⚡ لوحة التحكم والتحكم بالمعاملات")
+st.sidebar.title("⚡ لوحة التحكم والسيولة")
 
 app_mode = st.sidebar.radio("🧭 وضع المنصة:", ["تحليل فردي معمق", "مصفوفة مقارنة الأصول وإدارة المخاطر"])
 
-# التحكم المتقدم في النموذج (Parameter Tweaker)
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛️ تخصيص محرك الذكاء الاصطناعي")
 conf_threshold_input = st.sidebar.slider("عتبة الثقة المطلوبة (Confidence %):", min_value=50, max_value=85, value=60, step=5) / 100.0
@@ -143,7 +142,7 @@ if app_mode == "تحليل فردي معمق":
         st.sidebar.success("تم حفظ محفظتك في السحابة بنجاح!")
 
 
-# --- دوال جلب البيانات والمؤشرات المتقدمة ---
+# --- دوال جلب البيانات والمؤشرات وتصفيات السوق ---
 @st.cache_data(ttl=3600)
 def get_fear_and_greed():
     try:
@@ -205,7 +204,6 @@ def load_and_process_data(symbol, rsi_window=14):
         data['SMA_30'] = data['Close'].rolling(30).mean()
         data['SMA_Ratio'] = data['SMA_10'] / data['SMA_30']
         
-        # RSI ديناميكي حسب اختيار المستخدم
         delta = data['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(rsi_window).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(rsi_window).mean()
@@ -229,14 +227,18 @@ def load_and_process_data(symbol, rsi_window=14):
         dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
         data['ADX'] = dx.rolling(14).mean().fillna(20)
         
+        # محرك تقدير وتصفيات السيولة (Estimated Liquidation Index)
+        # يعتمد على التغير المفاجئ في الحجم مقارنة بالمدى السعري لضرب عقود الرافعة المالية
+        data['Estimated_Liquidations'] = (data['Volume'] * np.abs(data['Price_Change']) * data['VIX']).rolling(5).mean()
+        # تطبيع مؤشر التصفيات ليكون بين 0 و 100
+        liq_min = data['Estimated_Liquidations'].min()
+        liq_max = data['Estimated_Liquidations'].max()
+        data['Liquidation_Index'] = 100 * (data['Estimated_Liquidations'] - liq_min) / (liq_max - liq_min + 1e-9)
+        data['Liquidation_Index'] = data['Liquidation_Index'].fillna(50)
+        
         low_14 = data['Low'].rolling(14).min()
         high_14 = data['High'].rolling(14).max()
         data['Stochastic_K'] = 100 * (data['Close'] - low_14) / (high_14 - low_14 + 1e-9)
-        
-        data['BB_Middle'] = data['Close'].rolling(20).mean()
-        data['BB_Std'] = data['Close'].rolling(20).std()
-        data['BB_Upper'] = data['BB_Middle'] + (data['BB_Std'] * 2)
-        data['BB_Lower'] = data['BB_Middle'] - (data['BB_Std'] * 2)
         
         exp1 = data['Close'].ewm(span=12, adjust=False).mean()
         exp2 = data['Close'].ewm(span=26, adjust=False).mean()
@@ -278,13 +280,13 @@ def get_news_sentiment(symbol):
 
 advanced_features = [
     'Price_Change', 'Volume_Change', 'Lag_1', 'Lag_2',
-    'SMA_Ratio', 'RSI', 'ATR', 'ADX', 'Stochastic_K', 
+    'SMA_Ratio', 'RSI', 'ATR', 'ADX', 'Liquidation_Index', 'Stochastic_K', 
     'Fear_Greed_Index', 'VIX', 'MACD', 'MACD_Signal'
 ]
 
 if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاطر":
-    st.title("📊 مصفوفة مقارنة الأصول الاحترافية والفلاتر الذكية")
-    st.caption("تحليل مؤسسي متعدد الأصول مدعوم بفلاتر ADX ونماذج تحسين المحافظ.")
+    st.title("📊 مصفوفة مقارنة الأصول وسيولة السوق")
+    st.caption("تحليل مؤسسي متعدد الأصول مدعوم بمؤشرات تصفية الرافعة المالية والسيولة.")
     st.markdown("---")
     
     default_watchlist = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AAPL", "TSLA"]
@@ -294,7 +296,7 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
     comparison_data = []
     price_series_dict = {}
     
-    with st.spinner("جاري تشغيل محرك الفلاتر المتقدمة..."):
+    with st.spinner("جاري تشغيل محرك السيولة والارتباط..."):
         for asset in assets:
             df_asset = load_and_process_data(asset, rsi_window=rsi_period_input)
             if df_asset is not None and not df_asset.empty:
@@ -311,6 +313,7 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
                     prob_c = model_c.predict_proba(X_c.iloc[-1:])[0]
                     max_p = max(prob_c)
                     current_adx = float(df_asset['ADX'].iloc[-1])
+                    current_liq = float(df_asset['Liquidation_Index'].iloc[-1])
                     
                     if current_adx < 20:
                         decision = "⚠️ تذبذب عشوائي"
@@ -318,12 +321,11 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
                         decision = "📈 شراء" if pred_c == 1 and max_p >= conf_threshold_input else ("📉 بيع" if pred_c == 0 and max_p >= conf_threshold_input else "⚠️ ترقب")
                     
                     current_px = float(df_asset['Close'].iloc[-1])
-                    atr_val = float(df_asset['ATR'].iloc[-1])
                     
                     comparison_data.append({
                         "الأصل": asset,
                         "السعر الحالي ($)": f"${current_px:,.2f}",
-                        "RSI": f"{float(df_asset['RSI'].iloc[-1]):.1f}",
+                        "مؤشر التصفيات": f"{current_liq:.1f}/100",
                         "ADX": f"{current_adx:.1f}",
                         "قرار النظام": decision,
                         "نسبة الثقة": f"{max_p*100:.1f}%"
@@ -331,7 +333,7 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
                     price_series_dict[asset] = df_asset['Close']
                 
     if comparison_data:
-        st.subheader("📋 جدول القرارات المؤسسية")
+        st.subheader("📋 جدول القرارات وسيولة الحيتان")
         st.table(pd.DataFrame(comparison_data))
         
         if len(price_series_dict) > 1:
@@ -359,7 +361,7 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
         st.warning("لم يتم العثور على بيانات كافية.")
 
 else:
-    with st.spinner(f"جاري معالجة التحليل فائق الدقة لـ {crypto_symbol}..."):
+    with st.spinner(f"جاري معالجة التحليل وتحليل السيولة لـ {crypto_symbol}..."):
         data = load_and_process_data(crypto_symbol, rsi_window=rsi_period_input)
         sentiment_label, news_headlines = get_news_sentiment(crypto_symbol)
 
@@ -384,22 +386,23 @@ else:
         current_rsi = float(data['RSI'].iloc[-1])
         current_atr = float(data['ATR'].iloc[-1])
         current_adx = float(data['ADX'].iloc[-1])
+        current_liq = float(data['Liquidation_Index'].iloc[-1])
         
         stop_loss_val = current_price * (1 - (current_atr * 1.5))
         take_profit_val = current_price * (1 + (current_atr * 2.5))
         max_prob = max(probabilities)
 
-        st.title(f"🧠 منصة التحليل الاحترافية الفائقة لـ {crypto_symbol}")
-        st.caption("مدعوم بنماذج XGBoost الذكية والرسوم البيانية التفاعلية Plotly.")
+        st.title(f"🧠 منصة التحليل الاحترافية وسيولة الحيتان لـ {crypto_symbol}")
+        st.caption("مدعوم بنماذج XGBoost مع محرك تتبع عمليات تصفية الرافعة المالية (Liquidations).")
         st.markdown("---")
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric(label="💵 السعر الحالي", value=f"${current_price:,.2f}")
         with col2:
-            st.metric(label="📊 قوة الاتجاه (ADX)", value=f"{current_adx:.1f}")
+            st.metric(label="🌊 ضغط التصفيات والسيولة", value=f"{current_liq:.1f} / 100")
         with col3:
-            st.metric(label="😨 الخوف والجشع", value=f"{current_fng} / 100")
+            st.metric(label="📊 قوة الاتجاه (ADX)", value=f"{current_adx:.1f}")
         with col4:
             if current_adx < 20:
                 st.metric(label="🔮 قرار النظام", value="⚠️ تذبذب عشوائي", delta="تجنب", delta_color="off")
@@ -411,16 +414,15 @@ else:
                 st.metric(label="🔮 قرار النظام", value="📉 بيع / تجنب", delta=f"الثقة: {max_prob*100:.1f}%", delta_color="inverse")
 
         st.markdown("---")
-        st.subheader("📈 الرسم البياني التفاعلي المتطور مع نطاقات البولنجر والمستويات")
+        st.subheader("📈 الرسم البياني التفاعلي للسيولة وحركة الأسعار")
         
-        # رسم تفاعلي متقدم باستخدام Plotly
         fig_price = go.Figure()
         fig_price.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='السعر الحقيقي', line=dict(color='#00FFA3', width=2)))
         fig_price.add_trace(go.Scatter(x=data.index, y=data['BB_Upper'], mode='lines', name='البولنجر العلوي', line=dict(color='rgba(255,255,255,0.3)', dash='dash')))
         fig_price.add_trace(go.Scatter(x=data.index, y=data['BB_Lower'], mode='lines', name='البولنجر السفلي', line=dict(color='rgba(255,255,255,0.3)', dash='dash'), fill='tonexty'))
         
         fig_price.update_layout(
-            title=f"حركة السعر والحدود الفنية لـ {crypto_symbol}",
+            title=f"حركة الأسعار ومناطق السيولة لـ {crypto_symbol}",
             xaxis_title="التاريخ",
             yaxis_title="السعر ($)",
             template="plotly_dark",
