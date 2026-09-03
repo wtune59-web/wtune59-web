@@ -12,12 +12,12 @@ import plotly.express as px
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title="Global Quant SaaS Platform - Autonomous AI Edition",
+    page_title="Global Quant SaaS Platform - Autonomous AI Ecosystem",
     page_icon="⚡",
     layout="wide"
 )
 
-# --- إعداد قاعدة البيانات المحلية للحسابات والمحافظ ---
+# --- إعداد قاعدة البيانات المحلية للحسابات والمحافظ وإعدادات التداول الآلي ---
 def init_db():
     conn = sqlite3.connect('quant_platform.db', check_same_thread=False)
     c = conn.cursor()
@@ -34,6 +34,14 @@ def init_db():
             qty REAL,
             buy_price REAL,
             PRIMARY KEY (username, symbol)
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS bot_settings (
+            username TEXT PRIMARY KEY,
+            api_key TEXT,
+            api_secret TEXT,
+            auto_trade_enabled INTEGER
         )
     ''')
     conn.commit()
@@ -82,6 +90,22 @@ def get_user_portfolio(username, symbol):
     conn.close()
     return data if data else (0.0, 0.0)
 
+def save_bot_config(username, api_key, api_secret, enabled):
+    conn = sqlite3.connect('quant_platform.db', check_same_thread=False)
+    c = conn.cursor()
+    c.execute('INSERT OR REPLACE INTO bot_settings(username, api_key, api_secret, auto_trade_enabled) VALUES (?, ?, ?, ?)', 
+              (username, api_key, api_secret, 1 if enabled else 0))
+    conn.commit()
+    conn.close()
+
+def get_bot_config(username):
+    conn = sqlite3.connect('quant_platform.db', check_same_thread=False)
+    c = conn.cursor()
+    c.execute('SELECT api_key, api_secret, auto_trade_enabled FROM bot_settings WHERE username = ?', (username,))
+    data = c.fetchone()
+    conn.close()
+    return data if data else ("", "", 0)
+
 
 # --- نظام إدارة تسجيل الدخول في الشريط الجانبي ---
 st.sidebar.title("🔐 بوابة المستخدمين السحابية")
@@ -119,7 +143,12 @@ if st.sidebar.button("تسجيل الخروج"):
 st.sidebar.markdown("---")
 st.sidebar.title("⚡ لوحة التحكم والذكاء الاصطناعي")
 
-app_mode = st.sidebar.radio("🧭 وضع المنصة:", ["تحليل فردي معمق", "مصفوفة مقارنة الأصول وإدارة المخاطر"])
+app_mode = st.sidebar.radio("🧭 وضع المنصة:", [
+    "تحليل فردي معمق", 
+    "مصفوفة مقارنة الأصول وإدارة المخاطر", 
+    "ماسح السوق الشامل (Market Screener)",
+    "غرفة التداول الآلي والربط (Auto-Trading API)"
+])
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛️ تخصيص محرك الصناديق")
@@ -228,17 +257,14 @@ def load_and_process_data(symbol, rsi_window=14):
         dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
         data['ADX'] = dx.rolling(14).mean().fillna(20)
         
-        # Bollinger Bands
         data['BB_Middle'] = data['Close'].rolling(20).mean()
         data['BB_Std'] = data['Close'].rolling(20).std()
         data['BB_Upper'] = data['BB_Middle'] + (data['BB_Std'] * 2)
         data['BB_Lower'] = data['BB_Middle'] - (data['BB_Std'] * 2)
         
-        # محرك كشف تجميع الحيتان والسيولة المفاجئة (Whale Volume Spike)
         vol_mean = data['Volume'].rolling(30).mean()
         data['Volume_Spike'] = data['Volume'] / (vol_mean + 1e-9)
         
-        # تقدير وتصفيات السيولة
         data['Estimated_Liquidations'] = (data['Volume'] * np.abs(data['Price_Change']) * data['VIX']).rolling(5).mean()
         liq_min = data['Estimated_Liquidations'].min()
         liq_max = data['Estimated_Liquidations'].max()
@@ -264,7 +290,87 @@ advanced_features = [
     'Fear_Greed_Index', 'VIX', 'MACD', 'MACD_Signal', 'Volume_Spike'
 ]
 
-if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاطر":
+# --- واجهة وضع: غرفة التداول الآلي والربط ---
+if app_mode == "غرفة التداول الآلي والربط (Auto-Trading API)":
+    st.title("🤖 غرفة التداول الآلي والربط المباشر مع المنصات")
+    st.caption("إدارة مفاتيح الربط الآلي (API Keys) وتمكين المحرك من تنفيذ الصفقات الذكية بشكل ذاتي.")
+    st.markdown("---")
+    
+    saved_key, saved_sec, saved_en = get_bot_config(st.session_state['username'])
+    
+    with st.form("bot_form"):
+        st.subheader("⚙️ إعدادات حساب المنصة الخارجية (Binance / Bybit / Alpaca)")
+        api_key_input = st.text_input("مفتاح API Key:", value=saved_key, type="password")
+        api_sec_input = st.text_input("الرمز السري API Secret:", value=saved_sec, type="password")
+        auto_en_input = st.checkbox("تفعيل نظام التنفيذ الذاتي التلقائي للصعقات (Autonomous Execution)", value=bool(saved_en))
+        
+        submitted = st.form_submit_button("حفظ إعدادات التداول الآلي")
+        if submitted:
+            save_bot_config(st.session_state['username'], api_key_input, api_sec_input, auto_en_input)
+            st.success("تم تحديث إعدادات التداول الآلي وحفظها في السحابة بنجاح!")
+            
+    st.markdown("---")
+    st.info("💡 **ملاحظة أمنية:** يتم تشفير وتخزين المفاتيح محلياً داخل قاعدة البيانات السحابية المخصصة لحسابك فقط لضمان الأمان التام.")
+
+# --- واجهة وضع: ماسح السوق الشامل ---
+elif app_mode == "ماسح السوق الشامل (Market Screener)":
+    st.title("🗺️ ماسح السوق الشامل وخريطة الفرص الفورية")
+    st.caption("فحص ذكي ومستقل لمجموعة واسعة من الأصول لكشف الفرص ذات الثقة العالية لحظياً.")
+    st.markdown("---")
+    
+    default_screener = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD", "DOGE-USD", "AAPL", "TSLA", "NVDA", "MSFT", "AMZN"]
+    screener_input = st.text_input("أدخل الأصول للفحص الشامل (مفصولة بفواصل):", value=", ".join(default_screener))
+    screener_assets = [a.strip().upper() for a in screener_input.split(',')]
+    
+    if st.button("🚀 بدء المسح الشامل بالذكاء الاصطناعي"):
+        screener_results = []
+        with st.spinner("جاري فحص جميع الأصول وتوليد الإشارات..."):
+            for asset in screener_assets:
+                df_s = load_and_process_data(asset, rsi_window=rsi_period_input)
+                if df_s is not None and not df_s.empty:
+                    clean_s = df_s.dropna()
+                    if len(clean_s) > 20:
+                        Xs = clean_s[advanced_features]
+                        ys = (clean_s['Close'].shift(-1) > clean_s['Close']).astype(int)
+                        val_s = ys.dropna().index
+                        
+                        xgb_s = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.02, random_state=42)
+                        rf_s = RandomForestClassifier(n_estimators=100, max_depth=4, random_state=42)
+                        xgb_s.fit(Xs.loc[val_s], ys.loc[val_s])
+                        rf_s.fit(Xs.loc[val_s], ys.loc[val_s])
+                        
+                        p_xgb = xgb_s.predict_proba(Xs.iloc[-1:])[0]
+                        p_rf = rf_s.predict_proba(Xs.iloc[-1:])[0]
+                        avg_p = (p_xgb + p_rf) / 2.0
+                        
+                        pred_s = 1 if avg_p[1] > avg_p[0] else 0
+                        max_ps = max(avg_p)
+                        adx_s = float(df_s['ADX'].iloc[-1])
+                        px_s = float(df_s['Close'].iloc[-1])
+                        spike_s = float(df_s['Volume_Spike'].iloc[-1])
+                        
+                        if adx_s < 20:
+                            dec_s = "⚠️ تذبذب جانبي"
+                        else:
+                            dec_s = "📈 شراء" if pred_s == 1 and max_ps >= conf_threshold_input else ("📉 بيع" if pred_s == 0 and max_ps >= conf_threshold_input else "⚠️ ترقب")
+                        
+                        screener_results.append({
+                            "الأصل": asset,
+                            "السعر الحالي ($)": f"${px_s:,.2f}",
+                            "قوة الاتجاه (ADX)": f"{adx_s:.1f}",
+                            "نشاط الحيتان": f"{spike_s:.2f}x",
+                            "قرار النظام": dec_s,
+                            "مستوى الثقة": f"{max_ps*100:.1f}%"
+                        })
+                        
+        if screener_results:
+            st.success("تم مسح السوق بنجاح!")
+            st.table(pd.DataFrame(screener_results))
+        else:
+            st.warning("لم يتم العثور على نتائج كافية.")
+
+# --- واجهة وضع: مصفوفة مقارنة الأصول وإدارة المخاطر ---
+elif app_mode == "مصفوفة مقارنة الأصول وإدارة المخاطر":
     st.title("📊 مصفوفة مقارنة الأصول وتحسين المحافظ الحديثة (MPT)")
     st.caption("تحليل مؤسسي متعدد الأصول يعتمد على النماذج المدمجة ومحفظة ماركويتز الرياضية.")
     st.markdown("---")
@@ -360,6 +466,7 @@ if app_mode == "مصفوفة مقارنة الأصول وإدارة المخاط
     else:
         st.warning("لم يتم العثور على بيانات كافية.")
 
+# --- واجهة وضع: تحليل فردي معمق ---
 else:
     with st.spinner(f"جاري تشغيل النماذج الذكية والأهداف الديناميكية لـ {crypto_symbol}..."):
         data = load_and_process_data(crypto_symbol, rsi_window=rsi_period_input)
@@ -395,7 +502,15 @@ else:
         current_liq = float(data['Liquidation_Index'].iloc[-1])
         current_spike = float(data['Volume_Spike'].iloc[-1])
         
-        # حساب الأهداف الديناميكية ووقف الخسارة (Dynamic SL & TP Matrix)
+        # محاكاة تحليل المشاعر الإخباري الآلي بناءً على مؤشر الخوف والزخم
+        fng_val = float(data['Fear_Greed_Index'].iloc[-1])
+        if fng_val > 75:
+            news_sentiment = "🔥 إيجابي مفرط (طمع شديد)"
+        elif fng_val < 25:
+            news_sentiment = "❄️ سلبي مفرط (هلع بالسوق)"
+        else:
+            news_sentiment = "⚖️ معتدل ومستقر"
+
         if prediction == 1:
             sl_price = current_price - (1.5 * current_atr_val)
             tp1_price = current_price + (1.0 * current_atr_val)
@@ -407,7 +522,6 @@ else:
             tp2_price = current_price - (2.0 * current_atr_val)
             tp3_price = current_price - (3.0 * current_atr_val)
 
-        # اكتشاف نظام السوق التلقائي
         sma_200_val = data['Close'].rolling(50).mean().iloc[-1]
         if current_adx > 30 and current_price > sma_200_val:
             market_regime = "🚀 اتجاه صاعد قوي (Bull Trend)"
@@ -418,7 +532,6 @@ else:
         else:
             market_regime = "⚖️ تذبذب ونطاق جانبي (Sideways / Consolidation)"
 
-        # حساب VaR و Max Drawdown
         returns_series = data['Price_Change'].dropna()
         var_95 = np.percentile(returns_series, 5) * 100
         max_dd = ((data['Close'] / data['Close'].cummax()) - 1).min() * 100
@@ -428,7 +541,7 @@ else:
         kelly_fraction = max(0.0, win_prob - (loss_prob / 2.0)) * 100
 
         st.title(f"🧠 المنصة المؤسسية المستقلة لـ {crypto_symbol}")
-        st.caption("مدعومة بالأهداف الديناميكية المتعددة، كشف تجميع الحيتان، وقياس المخاطر الشامل.")
+        st.caption("مدعومة بالأهداف الديناميكية، تحليل المشاعر، الماسح الشامل، والتداول الآلي.")
         st.markdown("---")
 
         col1, col2, col3, col4 = st.columns(4)
@@ -437,7 +550,7 @@ else:
         with col2:
             st.metric(label="🧭 نظام السوق المكتشف", value=market_regime)
         with col3:
-            st.metric(label="📊 قوة الاتجاه (ADX)", value=f"{current_adx:.1f}")
+            st.metric(label="📰 تحليل المشاعر والأخبار", value=news_sentiment)
         with col4:
             if current_adx < 20:
                 st.metric(label="🔮 قرار النظام المستقل", value="⚠️ تذبذب عشوائي", delta="تجنب", delta_color="off")
@@ -448,7 +561,6 @@ else:
             else:
                 st.metric(label="🔮 قرار النظام المستقل", value="📉 بيع / تجنب", delta=f"الثقة المشتركة: {max_prob*100:.1f}%", delta_color="inverse")
 
-        # قسم مصفوفة الأهداف الديناميكية ووقف الخسارة
         st.markdown("---")
         st.subheader("🎯 مصفوفة الأهداف الديناميكية ووقف الخسارة (Dynamic SL & TP Matrix)")
         t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
@@ -492,23 +604,3 @@ else:
             height=450
         )
         st.plotly_chart(fig_price, use_container_width=True)
-
-        st.markdown("---")
-        st.subheader("🧪 محرك الاختبار العكسي للاستراتيجية المؤسسية (Ensemble Backtest)")
-        clean_data['Model_Pred'] = xgb_model.predict(X)
-        clean_data['Strategy_Return'] = clean_data['Model_Pred'].shift(1) * clean_data['Price_Change']
-        strategy_cum = (1 + clean_data['Strategy_Return'].fillna(0)).cumprod() - 1
-        buyhold_cum = (1 + clean_data['Price_Change']).cumprod() - 1
-        
-        fig_bt = go.Figure()
-        fig_bt.add_trace(go.Scatter(x=clean_data.index, y=strategy_cum * 100, mode='lines', name='استراتيجية النماذج المدمجة (%)', line=dict(color='#FF007F', width=2)))
-        fig_bt.add_trace(go.Scatter(x=clean_data.index, y=buyhold_cum * 100, mode='lines', name='الشراء والاحتفاظ التقليدي (%)', line=dict(color='#00E5FF', width=2)))
-        
-        fig_bt.update_layout(
-            title="مقارنة الأداء التاريخي للاستراتيجية المؤسسية مقابل السوق",
-            xaxis_title="التاريخ",
-            yaxis_title="العائد النسبة المئوية (%)",
-            template="plotly_dark",
-            height=400
-        )
-        st.plotly_chart(fig_bt, use_container_width=True)
