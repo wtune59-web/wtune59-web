@@ -328,7 +328,7 @@ if app_mode == "🧠 غرفة تحليل المشاعر والذعر الجمع�
             }
         ))
         fig_sent.update_layout(height=400, template="plotly_dark")
-        st.plotly_chart(fig_sent, width="stretch")
+        st.plotly_chart(fig_sent, use_container_width=True)
         
         if curr_fng < 20:
             st.error("🚨 **تحذير ذعر مفرط (Extreme Fear):** السوق يعاني من بيع عشوائي جماعي يسبق غالباً ارتدادات قوية.")
@@ -339,7 +339,7 @@ if app_mode == "🧠 غرفة تحليل المشاعر والذعر الجمع�
 
 elif app_mode == "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)":
     st.title("🛡️ درع حماية المحفظة عبر نظرية الفوضى (Chaos Theory & Fractal Shield)")
-    st.caption("الرصد المبكر لانهيارات الفلاش (Flash Crashes) والاضطرابات غير الخطية.")
+    st.caption("الرصد المبكر انهيارات الفلاش (Flash Crashes) والاضطرابات غير الخطية.")
     st.markdown("---")
     df_chaos = load_and_process_data(crypto_symbol)
     if df_chaos is not None:
@@ -349,7 +349,7 @@ elif app_mode == "🛡️ درع حماية المحفظة بنظرية الفو
         fig_ch = go.Figure()
         fig_ch.add_trace(go.Scatter(x=df_chaos.index[-90:], y=df_chaos['Fractal_Fragility'].iloc[-90:], mode='lines', name='معدل الفوضى', line=dict(color='#FF3366', width=2)))
         fig_ch.update_layout(template="plotly_dark", title="تطور مؤشر الفوضى الفراكتلية خلال آخر 90 يومًا", height=400)
-        st.plotly_chart(fig_ch, width="stretch")
+        st.plotly_chart(fig_ch, use_container_width=True)
         
         if curr_fragile > 3.5:
             st.error("🚨 **تنبيه خطر فوضى عالي:** هيكل السعر يظهر علامات عدم استقرار رياضية عالية! يُنصح بخفض الرافعة المالية.")
@@ -370,7 +370,7 @@ elif app_mode == "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunt
         fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Upper'].iloc[-50:], mode='lines', name='منطقة فخ البائعين (Short Trap)', line=dict(color='red', dash='dash')))
         fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Lower'].iloc[-50:], mode='lines', name='منطقة فخ المشترين (Long Trap)', line=dict(color='blue', dash='dash')))
         fig_sh.update_layout(template="plotly_dark", title="مستويات فخاخ صناع السوق واصطياد السيولة", height=450)
-        st.plotly_chart(fig_sh, width="stretch")
+        st.plotly_chart(fig_sh, use_container_width=True)
 
 elif app_mode == "🔮 غرفة التنبؤ العكسي لصناعة الاستراتيجيات (Reverse Lab)":
     st.title("🔮 غرفة التنبؤ العكسي وابتكار الاستراتيجيات (Reverse Optimization Engine)")
@@ -405,7 +405,7 @@ elif app_mode == "خريطة السيولة ونقاط التصفية (Liquidati
             st.success(f"تم تحليل خريطة السيولة بنجاح لـ {hm_symbol} عند سعر ${current_p:,.2f}")
             fig_hm = go.Figure(go.Scatter(x=df_hm.index[-60:], y=df_hm['Close'].iloc[-60:], mode='lines+markers', line=dict(color='#FF007A', width=3)))
             fig_hm.update_layout(template="plotly_dark", title="مستويات تركز التصفية ومناطق تجميع الحيتان", height=450)
-            st.plotly_chart(fig_hm, width="stretch")
+            st.plotly_chart(fig_hm, use_container_width=True)
 
 elif app_mode == "مخبتر اختبار الاستراتيجيات والتحسين المتقدم (Optimizer Lab)":
     st.title("🧪 مختبر تحسين الاستراتيجيات والتشغيل المستمر (Optimizer & Walk-Forward)")
@@ -433,7 +433,7 @@ elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal &
     st.title("📈 سجل الصفقات ومنحنى الأداء الحي (Equity Curve)")
     trades_df = get_trade_journal(st.session_state['username'])
     if not trades_df.empty:
-        st.dataframe(trades_df, width="stretch")
+        st.dataframe(trades_df, use_container_width=True)
     else:
         st.info("لا توجد صفقات مسجلة حتى الآن.")
 
@@ -488,7 +488,7 @@ elif app_mode == "مصفوفة مقارنة الأسواق والـ MPT":
         pdf = pd.DataFrame(price_dict).dropna()
         rets = pdf.pct_change().dropna()
         st.subheader("🔗 مصفوفة الارتباط")
-        st.plotly_chart(px.imshow(rets.corr(), text_auto=True, color_continuous_scale="RdBu_r", aspect="auto"), width="stretch")
+        st.plotly_chart(px.imshow(rets.corr(), text_auto=True, color_continuous_scale="RdBu_r", aspect="auto"), use_container_width=True)
 
 else:
     with st.spinner(f"جاري معالجة بيانات الأصل '{crypto_symbol}' بالذكاء الاصطناعي..."):
@@ -558,4 +558,4 @@ else:
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='السعر', line=dict(color='#00FFA3', width=2)))
         fig.update_layout(template="plotly_dark", height=400)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
