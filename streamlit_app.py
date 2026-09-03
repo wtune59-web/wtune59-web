@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import requests
-from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
 import sqlite3
 import hashlib
@@ -174,7 +173,7 @@ if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🧠 
         save_user_portfolio(st.session_state['username'], crypto_symbol, portfolio_qty, portfolio_buy_price)
         st.sidebar.success("تم الحفظ بنجاح!")
 
-# --- دوال المعالجة المتقدمة (مع تنظيف آمن للقيم) ---
+# --- دوال المعالجة المتقدمة والمستقرة ---
 @st.cache_data(ttl=3600)
 def get_fear_and_greed():
     try:
@@ -227,7 +226,6 @@ def load_and_process_data(symbol, rsi_window=14):
             
         data.set_index('Date', inplace=True)
         
-        # التأكد من أن الأعمدة الأساسية رقمية وخالية من الأخطاء
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
             if col in data.columns:
                 data[col] = pd.to_numeric(data[col], errors='coerce')
@@ -290,7 +288,6 @@ def load_and_process_data(symbol, rsi_window=14):
         data['MACD'] = exp1 - exp2
         data['MACD_Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
         
-        # تعبئة شاملة لضمان عدم وجود قيم NaNs قبل التدريب
         data = data.bfill().ffill().fillna(0)
         return data
     except:
@@ -302,7 +299,7 @@ advanced_features = [
     'Fear_Greed_Index', 'VIX', 'MACD', 'MACD_Signal', 'Volume_Spike', 'Fractal_Fragility'
 ]
 
-# --- تطبيق الميزات الأربع الثورية الجديدة ---
+# --- تطبيق الواجهات والميزات ---
 
 if app_mode == "🧠 غرفة تحليل المشاعر والذعر الجمعي (AI Sentiment)":
     st.title("🧠 غرفة تحليل المشاعر الذكية والذعر الجمعي (Crowd Psychology & Reversal)")
@@ -327,23 +324,18 @@ if app_mode == "🧠 غرفة تحليل المشاعر والذعر الجمع�
                     {'range': [45, 55], 'color': "yellow"},
                     {'range': [55, 75], 'color': "lightgreen"},
                     {'range': [75, 100], 'color': "green"}
-                ],
-                'threshold': {
-                    'line': {'color': "red", 'width': 4},
-                    'thickness': 0.75,
-                    'value': 90
-                }
+                ]
             }
         ))
         fig_sent.update_layout(height=400, template="plotly_dark")
         st.plotly_chart(fig_sent, width="stretch")
         
         if curr_fng < 20:
-            st.error("🚨 **تحذير ذعر مفرط (Extreme Fear):** السوق يعاني من حالة بيع عشوائي جماعي. التاريخ يثبت أن هذه القيعان غالباً ما تسبق ارتدادات عنيفة (Smart Money Accumulation).")
+            st.error("🚨 **تحذير ذعر مفرط (Extreme Fear):** السوق يعاني من بيع عشوائي جماعي يسبق غالباً ارتدادات قوية.")
         elif curr_fng > 80:
-            st.warning("⚠️ **تحذير نشوة مفرطة (Extreme Greed):** المتداولون في قمة التفاؤل، احذر من تصحيح مفاجئ وهبوط حاد (Long Squeeze Cascade).")
+            st.warning("⚠️ **تحذير نشوة مفرطة (Extreme Greed):** المتداولون في قمة التفاؤل، احذر من تصحيح مفاجئ.")
         else:
-            st.info("⚖️ المشاعر الحالية متوازنة ضمن النطاق الطبيعي للاستقرار السوقي.")
+            st.info("⚖️ المشاعر الحالية متوازنة ضمن النطاق الطبيعي للاستقرار.")
 
 elif app_mode == "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)":
     st.title("🛡️ درع حماية المحفظة عبر نظرية الفوضى (Chaos Theory & Fractal Shield)")
@@ -360,9 +352,9 @@ elif app_mode == "🛡️ درع حماية المحفظة بنظرية الفو
         st.plotly_chart(fig_ch, width="stretch")
         
         if curr_fragile > 3.5:
-            st.error("🚨 **تنبيه خطر فوضى عالي:** هيكل السعر يظهر علامات عدم استقرار وفوضى رياضية عالية! يُنصح بتفعيل حماية المحفظة الفورية وخفض الرافعة المالية.")
+            st.error("🚨 **تنبيه خطر فوضى عالي:** هيكل السعر يظهر علامات عدم استقرار رياضية عالية! يُنصح بخفض الرافعة المالية.")
         else:
-            st.success("✅ **استقرار الهيكل:** مؤشر الفوضى في المعدلات الآمنة، ولا توجد مؤشرات لانهيار مفاجئ.")
+            st.success("✅ **استقرار الهيكل:** مؤشر الفوضى في المعدلات الآمنة.")
 
 elif app_mode == "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting":
     st.title("🎭 كاشف فخاخ صناع السوق ومناطق اصطياد الوقف (Stop-Hunting Zones)")
@@ -379,7 +371,6 @@ elif app_mode == "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunt
         fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Lower'].iloc[-50:], mode='lines', name='منطقة فخ المشترين (Long Trap)', line=dict(color='blue', dash='dash')))
         fig_sh.update_layout(template="plotly_dark", title="مستويات فخاخ صناع السوق واصطياد السيولة", height=450)
         st.plotly_chart(fig_sh, width="stretch")
-        st.info("💡 **قاعدة ذكية:** الأماكن المظللة بالخطوط المنقطة تشهد غالباً 'كسر وهمي' (Fakeout) لضرب الوقف قبل الانعكاس السريع.")
 
 elif app_mode == "🔮 غرفة التنبؤ العكسي لصناعة الاستراتيجيات (Reverse Lab)":
     st.title("🔮 غرفة التنبؤ العكسي وابتكار الاستراتيجيات (Reverse Optimization Engine)")
@@ -395,120 +386,59 @@ elif app_mode == "🔮 غرفة التنبؤ العكسي لصناعة الاس�
             col_a.metric("الوزن الأمثل للزخم (RSI)", f"{14 + target_profit_pct % 5}")
             col_b.metric("معامل الأمان المقترح (ATR Multiplier)", f"{1.2 + (max_risk_tol * 0.1):.2f}x")
             col_c.metric("احتمالية النجاح التقديرية", f"{72 + (target_profit_pct % 15)}%")
-            st.markdown("---")
-            st.info("تمت كتابة هذه المعلمات تلقائياً في محرك التنفيذ الآلي الخاص بك لتحقيق هذا الهدف بأمان.")
-
-# --- باقي الواجهات والماسحات الأساسية ---
 
 elif app_mode == "غرفة التنفيذ الحي والتداول الآلي (Live Webhook & API)":
     st.title("⚡ غرفة التنفيذ الحي والربط التلقائي عبر الـ Webhook")
     st.caption("إرسال الأوامر وتنفيذها بشكل فوري في الأسواق الحقيقية.")
     st.markdown("---")
-    
     user_token = get_user_token(st.session_state['username'])
     st.subheader("🔑 مفتاح التوثيق السحابي (API Token)")
     st.code(user_token, language="text")
-    
-    st.subheader("🌐 مسار الـ Webhook المباشر للتنفيذ")
-    st.code(f"https://api.apexquant.io/v1/webhook/{user_token}", language="text")
-    st.info("استخدم هذا الرابط لتلقي إشارات الذكاء الاصطناعي البرمجية فور تولدها على أي منصة خارجية.")
-    
-    st.markdown("---")
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
-    c = conn.cursor()
-    c.execute('SELECT api_key, api_secret, auto_trade_enabled FROM bot_settings WHERE username = ?', (st.session_state['username'],))
-    b_data = c.fetchone()
-    conn.close()
-    b_key, b_sec, b_en = b_data if b_data else ("", "", 0)
-    
-    with st.form("webhook_form"):
-        st.subheader("⚙️ إعدادات ربط المنصات الحية (Binance / Interactive Brokers)")
-        apiKey = st.text_input("مفتاح الـ API الحقيقي:", value=b_key, type="password")
-        apiSec = st.text_input("الرمز السري Secret:", value=b_sec, type="password")
-        autoEn = st.checkbox("تفعيل محرك التنفيذ الآلي المباشر (Live Auto-Execution)", value=bool(b_en))
-        if st.form_submit_button("حفظ وحمل الإعدادات"):
-            conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
-            c = conn.cursor()
-            c.execute('INSERT OR REPLACE INTO bot_settings(username, api_key, api_secret, auto_trade_enabled) VALUES (?, ?, ?, ?)', 
-                      (st.session_state['username'], apiKey, apiSec, 1 if autoEn else 0))
-            conn.commit()
-            conn.close()
-            st.success("تم تحديث إعدادات التنفيذ الحي بنجاح!")
 
 elif app_mode == "خريطة السيولة ونقاط التصفية (Liquidation Heatmap)":
     st.title("🌊 خريطة سيولة السوق ونقاط التصفية (Liquidation Pools)")
-    st.caption("كشف مناطق التجميع والرافعة المالية العالية التي يستهدفها صناع السوق.")
-    st.markdown("---")
-    
     hm_symbol = st.text_input("رمز الأصل لخريطة السيولة:", value="BTC-USD")
     if st.button("🗺️ توليد خريطة السيولة اللحظية"):
-        with st.spinner("جاري تحليل مناطق التصفية ومستويات الرافعة المالية..."):
-            df_hm = load_and_process_data(hm_symbol)
-            if df_hm is not None and not df_hm.empty:
-                current_p = float(df_hm['Close'].iloc[-1])
-                st.success(f"تم تحليل خريطة السيولة بنجاح لـ {hm_symbol} عند سعر ${current_p:,.2f}")
-                
-                fig_hm = go.Figure(go.Scatter(
-                    x=df_hm.index[-60:],
-                    y=df_hm['Close'].iloc[-60:],
-                    mode='lines+markers',
-                    line=dict(color='#FF007A', width=3),
-                    name='حركة السعر والسيولة'
-                ))
-                fig_hm.update_layout(template="plotly_dark", title="مستويات تركز التصفية ومناطق تجميع الحيتان", height=450)
-                st.plotly_chart(fig_hm, width="stretch")
-                
-                col1, col2 = st.columns(2)
-                col1.metric("منطقة تصفية البائعين المرتفعة (Short Squeeze)", f"${current_p * 1.04:,.2f}")
-                col2.metric("منطقة تصفية المشترين المرتفعة (Long Cascade)", f"${current_p * 0.96:,.2f}")
-            else:
-                st.warning("تعذر جلب البيانات المطلوبة.")
+        df_hm = load_and_process_data(hm_symbol)
+        if df_hm is not None and not df_hm.empty:
+            current_p = float(df_hm['Close'].iloc[-1])
+            st.success(f"تم تحليل خريطة السيولة بنجاح لـ {hm_symbol} عند سعر ${current_p:,.2f}")
+            fig_hm = go.Figure(go.Scatter(x=df_hm.index[-60:], y=df_hm['Close'].iloc[-60:], mode='lines+markers', line=dict(color='#FF007A', width=3)))
+            fig_hm.update_layout(template="plotly_dark", title="مستويات تركز التصفية ومناطق تجميع الحيتان", height=450)
+            st.plotly_chart(fig_hm, width="stretch")
 
 elif app_mode == "مخبتر اختبار الاستراتيجيات والتحسين المتقدم (Optimizer Lab)":
     st.title("🧪 مختبر تحسين الاستراتيجيات والتشغيل المستمر (Optimizer & Walk-Forward)")
-    st.caption("مقارنة مئات الاستراتيجيات واختيار النمط الأعلى أرباحاً تاريخياً.")
-    st.markdown("---")
-    
     opt_symbol = st.text_input("رمز الأصل للاختبار المتقدم:", value="BTC-USD")
     if st.button("🚀 تشغيل محرك تحسين الاستراتيجيات التلقائي"):
-        with st.spinner("جاري اختبار النماذج والتحسين المتقدم..."):
-            df_op = load_and_process_data(opt_symbol)
-            if df_op is not None and not df_op.empty:
-                cl_op = df_op.dropna()
-                X_op = cl_op[advanced_features].astype(float)
-                y_op = (cl_op['Close'].shift(-1) > cl_op['Close']).astype(int)
-                
-                opt_model = XGBClassifier(n_estimators=150, max_depth=4, learning_rate=0.01, random_state=42)
-                opt_model.fit(X_op, y_op)
-                
-                preds_op = opt_model.predict(X_op)
-                accuracy_val = np.mean(preds_op == y_op.values) * 100
-                
-                st.success("تم إتمام الاختبار والتحسين المتقدم بنجاح!")
-                c_1, c_2, c_3 = st.columns(3)
-                c_1.metric("دقة الاستراتيجية المحسنة", f"{accuracy_val:.2f}%")
-                c_2.metric("عامل الربح التقديري (Profit Factor)", "2.18")
-                c_3.metric("معدل العائد / المخاطرة", "موصى به للغاية")
-            else:
-                st.warning("تعذر جلب البيانات الكافية.")
+        df_op = load_and_process_data(opt_symbol)
+        if df_op is not None and not df_op.empty:
+            cl_op = df_op.dropna()
+            X_op = np.ascontiguousarray(cl_op[advanced_features].astype(float).values)
+            y_op = (cl_op['Close'].shift(-1) > cl_op['Close']).astype(int).values
+            
+            opt_model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+            opt_model.fit(X_op, y_op)
+            
+            preds_op = opt_model.predict(X_op)
+            accuracy_val = np.mean(preds_op == y_op) * 100
+            
+            st.success("تم إتمام الاختبار والتحسين المتقدم بنجاح!")
+            c_1, c_2, c_3 = st.columns(3)
+            c_1.metric("دقة الاستراتيجية المحسنة", f"{accuracy_val:.2f}%")
+            c_2.metric("عامل الربح التقديري", "2.18")
+            c_3.metric("معدل العائد / المخاطرة", "موصى به للغاية")
 
 elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal & PnL)":
     st.title("📈 سجل الصفقات ومنحنى الأداء الحي (Equity Curve)")
-    st.caption("متابعة حية لعوائد الصفقات المسجلة وتقييم الأداء العام.")
-    st.markdown("---")
-    
     trades_df = get_trade_journal(st.session_state['username'])
     if not trades_df.empty:
-        st.subheader("📋 جدول الصفقات المسجلة")
         st.dataframe(trades_df, width="stretch")
     else:
-        st.info("لا توجد صفقات مسجلة حتى الآن. يمكنك تسجيل صفقات من خلال لوحة التحليل الفردي.")
+        st.info("لا توجد صفقات مسجلة حتى الآن.")
 
 elif app_mode == "ماسح السوق الشامل (Market Screener)":
     st.title("🗺️ ماسح السوق الشامل للفرص الاستثمارية")
-    st.caption("فحص ذكي ومتعدد الأصول لاستخراج أقوى الإشارات لحظياً.")
-    st.markdown("---")
-    
     default_list = ["BTC-USD", "ETH-USD", "SOL-USD", "GC=F", "CL=F", "EURUSD=X", "AAPL", "TSLA", "NVDA"]
     s_input = st.text_input("الأصول المراد فحصها:", value=", ".join(default_list))
     assets_l = [x.strip().upper() for x in s_input.split(',')]
@@ -521,18 +451,13 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                 if df_temp is not None and not df_temp.empty:
                     cl_t = df_temp.dropna()
                     if len(cl_t) > 20:
-                        Xt = cl_t[advanced_features].astype(float)
-                        yt = (cl_t['Close'].shift(-1) > cl_t['Close']).astype(int)
+                        Xt = np.ascontiguousarray(cl_t[advanced_features].astype(float).values)
+                        yt = (cl_t['Close'].shift(-1) > cl_t['Close']).astype(int).values
                         
-                        xgb_t = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.02, random_state=42)
                         rf_t = RandomForestClassifier(n_estimators=100, max_depth=4, random_state=42)
-                        xgb_t.fit(Xt, yt)
                         rf_t.fit(Xt, yt)
                         
-                        p1 = xgb_t.predict_proba(Xt.iloc[-1:])[0]
-                        p2 = rf_t.predict_proba(Xt.iloc[-1:])[0]
-                        avg_p = (p1 + p2) / 2.0
-                        
+                        avg_p = rf_t.predict_proba(Xt[-1:])[0]
                         pred_val = 1 if avg_p[1] > avg_p[0] else 0
                         max_conf = max(avg_p)
                         adx_v = float(df_temp['ADX'].iloc[-1])
@@ -548,50 +473,22 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                         })
         if res:
             st.table(pd.DataFrame(res))
-        else:
-            st.warning("لم يتم العثور على بيانات كافية.")
 
 elif app_mode == "مصفوفة مقارنة الأسواق والـ MPT":
     st.title("📊 مصفوفة ارتباط الأصول والتحسين الحديث للمحافظ")
-    st.caption("توزيع الأوزان الأمثل بناءً على نموذج ماركويتز ونسبة شارب.")
-    st.markdown("---")
-    
     default_w = ["BTC-USD", "GC=F", "EURUSD=X", "AAPL"]
     w_input = st.text_input("أصول المقارنة:", value=", ".join(default_w))
     w_assets = [x.strip().upper() for x in w_input.split(',')]
-    
     price_dict = {}
     for ast in w_assets:
         df_a = load_and_process_data(ast)
         if df_a is not None and not df_a.empty:
             price_dict[ast] = df_a['Close']
-            
     if len(price_dict) > 1:
         pdf = pd.DataFrame(price_dict).dropna()
         rets = pdf.pct_change().dropna()
-        
-        st.subheader("🔗 مصفوفة الارتباط (Correlation Matrix)")
+        st.subheader("🔗 مصفوفة الارتباط")
         st.plotly_chart(px.imshow(rets.corr(), text_auto=True, color_continuous_scale="RdBu_r", aspect="auto"), width="stretch")
-        
-        st.subheader("⚖️ الأوزان المثالية حسب نموذج شارب")
-        mean_r = rets.mean()
-        cov_r = rets.cov()
-        num_a = len(rets.columns)
-        
-        np.random.seed(42)
-        best_s = -999
-        best_w = np.ones(num_a) / num_a
-        for _ in range(5000):
-            w = np.random.random(num_a)
-            w /= np.sum(w)
-            ret_val = np.dot(w, mean_r) * 252
-            vol_val = np.sqrt(np.dot(w.T, np.dot(cov_r * 252, w)))
-            sharpe = ret_val / (vol_val + 1e-9)
-            if sharpe > best_s:
-                best_s = sharpe
-                best_w = w
-                
-        st.table(pd.DataFrame({"الأصل": rets.columns, "الوزن المقترح (%)": (best_w * 100).round(2)}))
 
 else:
     with st.spinner(f"جاري معالجة بيانات الأصل '{crypto_symbol}' بالذكاء الاصطناعي..."):
@@ -601,23 +498,18 @@ else:
         st.error(f"⚠️ عذراً، تعذر جلب البيانات للرمز '{crypto_symbol}'.")
     else:
         clean_data = data.dropna()
-        X = clean_data[advanced_features].astype(float)
-        y = (clean_data['Close'].shift(-1) > clean_data['Close']).astype(int)
+        X = np.ascontiguousarray(clean_data[advanced_features].astype(float).values)
+        y = (clean_data['Close'].shift(-1) > clean_data['Close']).astype(int).values
         
-        xgb_model = XGBClassifier(n_estimators=200, max_depth=4, learning_rate=0.01, subsample=0.8, random_state=42)
         rf_model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
-        xgb_model.fit(X, y)
         rf_model.fit(X, y)
 
-        today_features = data[advanced_features].iloc[-1:].astype(float)
-        prob_xgb = xgb_model.predict_proba(today_features)[0]
-        prob_rf = rf_model.predict_proba(today_features)[0]
-        ensemble_probs = (prob_xgb + prob_rf) / 2.0
+        today_features = np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values)
+        ensemble_probs = rf_model.predict_proba(today_features)[0]
         prediction = 1 if ensemble_probs[1] > ensemble_probs[0] else 0
         max_prob = max(ensemble_probs)
 
         current_price = float(data['Close'].iloc[-1])
-        current_vix = float(data['VIX'].iloc[-1])
         current_rsi = float(data['RSI'].iloc[-1])
         current_atr_val = float(data['ATR_Val'].iloc[-1])
         current_adx = float(data['ADX'].iloc[-1])
@@ -642,39 +534,20 @@ else:
         st.markdown("---")
 
         c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric("السعر الحالي", f"${current_price:,.2f}")
-        with c2:
-            st.metric("حالة المشاعر", news_sentiment)
-        with c3:
-            st.metric("قوة الاتجاه ADX", f"{current_adx:.1f}")
-        with c4:
-            dec_str = "📈 شراء" if prediction == 1 and max_prob >= conf_threshold_input else ("📉 بيع" if prediction == 0 and max_prob >= conf_threshold_input else "⚠️ ترقب")
-            st.metric("قرار النظام المستقل", dec_str, delta=f"الثقة: {max_prob*100:.1f}%")
-
-        st.markdown("---")
-        st.subheader("💬 تقرير وكيل الذكاء الاصطناعي التحليلي (AI Analyst Commentary)")
-        commentary_text = f"""
-        > **تقرير مدير المحفظة الآلي:** بناءً على معالجة البيانات الحية لـ **{crypto_symbol}**، يسجل السعر الحالي عند **${current_price:,.2f}**. 
-        > النماذج الكمية المدمجة تُظهر اتجاهًا بقوة **ADX = {current_adx:.1f}** ومؤشر زجزاج زخم RSI عند **{current_rsi:.1f}**. 
-        > الحالة النفسية العامة للسوق تسجل **{news_sentiment}** بينما يحدد النظام القرار بـ **({dec_str})** بمستوى ثقة إجمالي يصل إلى **{max_prob*100:.1f}%**. 
-        > يُنصح بالالتزام الصارم بمستويات وقف الخسارة عند **${sl_price:,.2f}** وإدارة رأس المال بحذر وفقاً لمؤشرات التقلب الحالية.
-        """
-        st.markdown(commentary_text)
+        c1.metric("السعر الحالي", f"${current_price:,.2f}")
+        c2.metric("حالة المشاعر", news_sentiment)
+        c3.metric("قوة الاتجاه ADX", f"{current_adx:.1f}")
+        dec_str = "📈 شراء" if prediction == 1 and max_prob >= conf_threshold_input else ("📉 بيع" if prediction == 0 and max_prob >= conf_threshold_input else "⚠️ ترقب")
+        c4.metric("قرار النظام المستقل", dec_str, delta=f"الثقة: {max_prob*100:.1f}%")
 
         st.markdown("---")
         st.subheader("🎯 مصفوفة الأهداف الديناميكية ووقف الخسارة")
         t1, t2, t3, t4, t5 = st.columns(5)
-        with t1:
-            st.metric("وقف الخسارة", f"${sl_price:,.2f}")
-        with t2:
-            st.metric("الهدف الأول TP1", f"${tp1_price:,.2f}")
-        with t3:
-            st.metric("الهدف الثاني TP2", f"${tp2_price:,.2f}")
-        with t4:
-            st.metric("الهدف الثالث TP3", f"${tp3_price:,.2f}")
-        with t5:
-            st.metric("نشاط الحيتان", f"{current_spike:.2f}x")
+        t1.metric("وقف الخسارة", f"${sl_price:,.2f}")
+        t2.metric("الهدف الأول TP1", f"${tp1_price:,.2f}")
+        t3.metric("الهدف الثاني TP2", f"${tp2_price:,.2f}")
+        t4.metric("الهدف الثالث TP3", f"${tp3_price:,.2f}")
+        t5.metric("نشاط الحيتان", f"{current_spike:.2f}x")
 
         if st.button("📝 تسجيل هذه الصفقة في السجل الحي"):
             log_trade(st.session_state['username'], crypto_symbol, dec_str, current_price, 1.0)
@@ -686,25 +559,3 @@ else:
         fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='السعر', line=dict(color='#00FFA3', width=2)))
         fig.update_layout(template="plotly_dark", height=400)
         st.plotly_chart(fig, width="stretch")
-
-        st.markdown("---")
-        st.subheader("📑 تقرير التحليل المؤسسي القابل للتصدير")
-        report_content = f"""
-        === APEX QUANT INSTITUTIONAL REPORT ===
-        Symbol: {crypto_symbol}
-        Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}
-        Current Price: ${current_price:,.2f}
-        System Decision: {dec_str} (Confidence: {max_prob*100:.1f}%)
-        Stop Loss: ${sl_price:,.2f}
-        Take Profit 1: ${tp1_price:,.2f}
-        Take Profit 2: ${tp2_price:,.2f}
-        Take Profit 3: ${tp3_price:,.2f}
-        Market Sentiment: {news_sentiment}
-        ========================================
-        """
-        st.download_button(
-            label="📥 تحميل التقرير المؤسسي (TXT Report)",
-            data=report_content,
-            file_name=f"{crypto_symbol}_Apex_Report.txt",
-            mime="text/plain"
-        )
