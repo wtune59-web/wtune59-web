@@ -139,7 +139,7 @@ st.sidebar.header("💡 شراكات المنصات")
 st.sidebar.markdown("[🔗 سجل في Binance واحصل على خصم](https://accounts.binance.com/register?ref=YOUR_REF_ID)")
 
 
-# --- دوال جلب وتحليل البيانات (مع تخزين مؤقت قوي لتقليل الضغط على المعالج) ---
+# --- دوال جلب وتحليل البيانات ---
 @st.cache_data(ttl=3600)
 def get_fear_and_greed():
     try:
@@ -155,8 +155,8 @@ def get_fear_and_greed():
 @st.cache_data(ttl=3600)
 def load_and_process_data(symbol):
     try:
-        # تقليل الفترة الزمنية إلى سنة ونصف بدلاً من 3 سنوات لتسريع المعالجة وتقليل استهلاك المعالج
-        data = yf.download(symbol, period='1.5y', progress=False)
+        # تم تصحيح الفترة لتكون سنة واحدة ('1y') لأن yfinance لا تقبل كسور مثل '1.5y'
+        data = yf.download(symbol, period='1y', progress=False)
         if data.empty:
             return None
         if isinstance(data.columns, pd.MultiIndex):
@@ -234,7 +234,6 @@ def get_news_sentiment(symbol):
         return "محايد ⚪", ["تعذر جلب الأخبار الحية."]
 
 
-# --- دالة تحليل سريعة مخزنة مؤقتاً للمصفوفة لمنع استهلاك المعالج ---
 @st.cache_data(ttl=3600)
 def analyze_asset_fast(asset):
     df_asset = load_and_process_data(asset)
@@ -244,12 +243,11 @@ def analyze_asset_fast(asset):
             'SMA_Ratio', 'RSI', 'Fear_Greed_Index', 'BB_Width', 'MACD', 'MACD_Signal'
         ]
         clean = df_asset.dropna()
-        if len(clean) > 30:
+        if len(clean) > 20:
             X_c = clean[features]
             y_c = (clean['Close'].shift(-1) > clean['Close']).astype(int)
             valid = y_c.dropna().index
             
-            # نموذج خفيف جداً لتقليل استهلاك المعالج (CPU)
             model_c = XGBClassifier(n_estimators=50, max_depth=2, learning_rate=0.05, random_state=42)
             model_c.fit(X_c.loc[valid], y_c.loc[valid])
             
@@ -270,8 +268,8 @@ def analyze_asset_fast(asset):
 
 
 if app_mode == "مصفوفة مقارنة الأصول (Multi-Asset)":
-    st.title("📊 مصفوفة المقارنة الفورية متعددة الأصول (محسنة السرعة)")
-    st.caption("نتائج مخزنة مؤقتاً لضمان عدم استهلاك موارد المعالج وسرعة الاستجابة.")
+    st.title("📊 مصفوفة المقارنة الفورية متعددة الأصول")
+    st.caption("نتائج مخزنة مؤقتاً لضمان السرعة العالية وعدم استهلاك موارد المعالج.")
     st.markdown("---")
     
     default_watchlist = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AAPL", "TSLA"]
