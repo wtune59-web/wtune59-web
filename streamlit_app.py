@@ -174,7 +174,7 @@ if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🧠 
         save_user_portfolio(st.session_state['username'], crypto_symbol, portfolio_qty, portfolio_buy_price)
         st.sidebar.success("تم الحفظ بنجاح!")
 
-# --- دوال المعالجة المتقدمة ---
+# --- دوال المعالجة المتقدمة (مع تنظيف آمن للقيم) ---
 @st.cache_data(ttl=3600)
 def get_fear_and_greed():
     try:
@@ -227,6 +227,11 @@ def load_and_process_data(symbol, rsi_window=14):
             
         data.set_index('Date', inplace=True)
         
+        # التأكد من أن الأعمدة الأساسية رقمية وخالية من الأخطاء
+        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+            if col in data.columns:
+                data[col] = pd.to_numeric(data[col], errors='coerce')
+                
         data['Price_Change'] = data['Close'].pct_change()
         data['Volume_Change'] = data['Volume'].pct_change()
         data['Lag_1'] = data['Price_Change'].shift(1)
@@ -268,7 +273,6 @@ def load_and_process_data(symbol, rsi_window=14):
         vol_mean = data['Volume'].rolling(30).mean()
         data['Volume_Spike'] = data['Volume'] / (vol_mean + 1e-9)
         
-        # مؤشر الهشاشة الفراكتلية (Chaos Fractal Fragility)
         data['Fractal_Fragility'] = (data['Close'].rolling(5).std() / (data['Close'].rolling(30).std() + 1e-9)) * data['VIX']
         
         data['Estimated_Liquidations'] = (data['Volume'] * np.abs(data['Price_Change']) * data['VIX']).rolling(5).mean()
@@ -286,6 +290,8 @@ def load_and_process_data(symbol, rsi_window=14):
         data['MACD'] = exp1 - exp2
         data['MACD_Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
         
+        # تعبئة شاملة لضمان عدم وجود قيم NaNs قبل التدريب
+        data = data.bfill().ffill().fillna(0)
         return data
     except:
         return None
@@ -377,7 +383,7 @@ elif app_mode == "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunt
 
 elif app_mode == "🔮 غرفة التنبؤ العكسي لصناعة الاستراتيجيات (Reverse Lab)":
     st.title("🔮 غرفة التنبؤ العكسي وابتكار الاستراتيجيات (Reverse Optimization Engine)")
-    st.caption("أدخل هدفك المفي والربحي، وسيقوم النظام بتخليق استراتيجية تناسبه تماماً!")
+    st.caption("أدخل هدفك المالي والربحي، وسيقوم النظام بتخليق استراتيجية تناسبه تماماً!")
     st.markdown("---")
     target_profit_pct = st.slider("حدد العائد المستهدف المنشود (%):", 5, 50, 15, 1)
     max_risk_tol = st.slider("أقصى درجة مخاطرة مقبولة:", 1, 10, 3, 1)
@@ -469,15 +475,14 @@ elif app_mode == "مخبتر اختبار الاستراتيجيات والتح�
             df_op = load_and_process_data(opt_symbol)
             if df_op is not None and not df_op.empty:
                 cl_op = df_op.dropna()
-                X_op = cl_op[advanced_features]
+                X_op = cl_op[advanced_features].astype(float)
                 y_op = (cl_op['Close'].shift(-1) > cl_op['Close']).astype(int)
-                val_op = y_op.dropna().index
                 
                 opt_model = XGBClassifier(n_estimators=150, max_depth=4, learning_rate=0.01, random_state=42)
-                opt_model.fit(X_op.loc[val_op], y_op.loc[val_op])
+                opt_model.fit(X_op, y_op)
                 
                 preds_op = opt_model.predict(X_op)
-                accuracy_val = np.mean(preds_op == y_op.loc[X_op.index].values) * 100
+                accuracy_val = np.mean(preds_op == y_op.values) * 100
                 
                 st.success("تم إتمام الاختبار والتحسين المتقدم بنجاح!")
                 c_1, c_2, c_3 = st.columns(3)
@@ -516,14 +521,13 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                 if df_temp is not None and not df_temp.empty:
                     cl_t = df_temp.dropna()
                     if len(cl_t) > 20:
-                        Xt = cl_t[advanced_features]
+                        Xt = cl_t[advanced_features].astype(float)
                         yt = (cl_t['Close'].shift(-1) > cl_t['Close']).astype(int)
-                        vt = yt.dropna().index
                         
                         xgb_t = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.02, random_state=42)
                         rf_t = RandomForestClassifier(n_estimators=100, max_depth=4, random_state=42)
-                        xgb_t.fit(Xt.loc[vt], yt.loc[vt])
-                        rf_t.fit(Xt.loc[vt], yt.loc[vt])
+                        xgb_t.fit(Xt, yt)
+                        rf_t.fit(Xt, yt)
                         
                         p1 = xgb_t.predict_proba(Xt.iloc[-1:])[0]
                         p2 = rf_t.predict_proba(Xt.iloc[-1:])[0]
@@ -597,16 +601,15 @@ else:
         st.error(f"⚠️ عذراً، تعذر جلب البيانات للرمز '{crypto_symbol}'.")
     else:
         clean_data = data.dropna()
-        X = clean_data[advanced_features]
+        X = clean_data[advanced_features].astype(float)
         y = (clean_data['Close'].shift(-1) > clean_data['Close']).astype(int)
-        valid_idx = y.dropna().index
         
         xgb_model = XGBClassifier(n_estimators=200, max_depth=4, learning_rate=0.01, subsample=0.8, random_state=42)
         rf_model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
-        xgb_model.fit(X.loc[valid_idx], y.loc[valid_idx])
-        rf_model.fit(X.loc[valid_idx], y.loc[valid_idx])
+        xgb_model.fit(X, y)
+        rf_model.fit(X, y)
 
-        today_features = data[advanced_features].iloc[-1:]
+        today_features = data[advanced_features].iloc[-1:].astype(float)
         prob_xgb = xgb_model.predict_proba(today_features)[0]
         prob_rf = rf_model.predict_proba(today_features)[0]
         ensemble_probs = (prob_xgb + prob_rf) / 2.0
