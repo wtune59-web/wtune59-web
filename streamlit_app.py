@@ -1,151 +1,122 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
-import math
-from pathlib import Path
+import requests
+from xgboost import XGBClassifier
 
-# Set the title and favicon that appear in the Browser's tab bar.
+# إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title="Crypto AI Intelligence | منصة توقعات العملات",
+    page_icon="🚀",
+    layout="wide"
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+# 1. الشريط الجانبي للإعدادات وروابط الإحالة
+st.sidebar.title("لوحة التحكم الذكية")
+st.sidebar.markdown("---")
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
-
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
-
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
+crypto_symbol = st.sidebar.selectbox(
+    "📊 اختر العملة الرقمية:",
+    ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "BNB-USD"]
 )
 
-''
-''
+st.sidebar.markdown("---")
+st.sidebar.header("💡 انضم إلى منصات التداول")
+st.sidebar.markdown("[🔗 سجل في Binance واحصل على خصم](https://accounts.binance.com/register?ref=YOUR_REF_ID)")
+st.sidebar.markdown("[🔗 سجل في Bybit لتداول العملات](https://www.bybit.com/invite?ref=YOUR_REF_ID)")
 
+# 2. الواجهة الرئيسية
+st.title("📈 منصة تحليل وتوقع العملات الرقمية بالذكاء الاصطناعي")
+st.caption("نظام يعتمد على خوارزميات XGBoost، المؤشرات الفنية، ومؤشر الخوف والجشع لقراءة اتجاه السوق.")
+st.markdown("---")
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+# دالة جلب مؤشر الخوف والجشع
+@st.cache_data(ttl=3600)
+def get_fear_and_greed():
+    try:
+        url = "https://api.alternative.me/fng/?limit=0"
+        response = requests.get(url).json()
+        df = pd.DataFrame(response['data'])
+        df['value'] = df['value'].astype(int)
+        df['Date'] = pd.to_datetime(df['timestamp'].astype(int), unit='s').dt.strftime('%Y-%m-%d')
+        return df[['Date', 'value']].rename(columns={'value': 'Fear_Greed_Index'})
+    except:
+        return None
 
-st.header(f'GDP in {to_year}', divider='gray')
+# جلب بيانات العملة ومعالجتها
+@st.cache_data(ttl=1800)
+def load_and_process_data(symbol):
+    data = yf.download(symbol, period='3y', progress=False)
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+    
+    data = data.reset_index()
+    data['Date'] = pd.to_datetime(data['Date']).dt.strftime('%Y-%m-%d')
+    
+    fng_df = get_fear_and_greed()
+    if fng_df is not None:
+        data = pd.merge(data, fng_df, on='Date', how='inner')
+        
+    data.set_index('Date', inplace=True)
+    
+    # حساب المؤشرات الفنية
+    data['Price_Change'] = data['Close'].pct_change()
+    data['Volume_Change'] = data['Volume'].pct_change()
+    data['SMA_10'] = data['Close'].rolling(10).mean()
+    data['SMA_30'] = data['Close'].rolling(30).mean()
+    data['SMA_Ratio'] = data['SMA_10'] / data['SMA_30']
+    
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    rs = gain / loss
+    data['RSI'] = 100 - (100 / (1 + rs))
+    
+    return data
 
-''
+with st.spinner(f"جاري جلب وتحليل بيانات {crypto_symbol}..."):
+    data = load_and_process_data(crypto_symbol)
+    features = ['Price_Change', 'Volume_Change', 'SMA_Ratio', 'RSI', 'Fear_Greed_Index']
 
-cols = st.columns(4)
+    today_features = data[features].iloc[-1:]
+    data['Target'] = (data['Close'].shift(-1) > data['Close']).astype(int)
+    clean_data = data.dropna()
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
+    X = clean_data[features]
+    y = clean_data['Target']
 
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+    model = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.03, random_state=42)
+    model.fit(X, y)
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+    prediction = model.predict(today_features)[0]
+    probabilities = model.predict_proba(today_features)[0]
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+# --- عرض النتائج في كروت ---
+current_price = float(data['Close'].iloc[-1])
+current_fng = int(data['Fear_Greed_Index'].iloc[-1]) if 'Fear_Greed_Index' in data.columns else "N/A"
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(label="💵 السعر الحالي", value=f"${current_price:,.2f}")
+
+with col2:
+    st.metric(label="😨 مؤشر الخوف والجشع", value=f"{current_fng} / 100")
+
+with col3:
+    if prediction == 1:
+        st.metric(label="🔮 توقع حركة الغد", value="📈 ارتفاع متوقع", delta=f"ثقة النموذج: {probabilities[1]*100:.1f}%")
+    else:
+        st.metric(label="🔮 توقع حركة الغد", value="📉 انخفاض متوقع", delta=f"ثقة النموذج: {probabilities[0]*100:.1f}%", delta_color="inverse")
+
+st.markdown("---")
+
+# --- الرسوم البيانية ---
+st.subheader(f"📊 التحليل الفني لـ {crypto_symbol}")
+tab1, tab2 = st.tabs(["📉 حركة السعر التاريخية", "📈 مؤشر القوة النسبية (RSI)"])
+
+with tab1:
+    st.line_chart(data['Close'])
+
+with tab2:
+    st.line_chart(data['RSI'])
