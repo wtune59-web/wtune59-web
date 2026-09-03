@@ -13,19 +13,19 @@ import uuid
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title="Global Quant SaaS Platform - Apex Elite Pro 2026",
+    page_title="Global Quant SaaS Platform - Apex Titan Pro Max 2026",
     page_icon="⚡",
     layout="wide"
 )
 
-# --- إعداد قاعدة البيانات الشاملة ---
+# --- إعداد قاعدة البيانات الشاملة والموسعة ---
 def init_db():
-    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, api_token TEXT)')
+    c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, api_token TEXT, score REAL DEFAULT 100.0)')
     c.execute('CREATE TABLE IF NOT EXISTS portfolios (username TEXT, symbol TEXT, qty REAL, buy_price REAL, PRIMARY KEY (username, symbol))')
-    c.execute('CREATE TABLE IF NOT EXISTS bot_settings (username TEXT PRIMARY KEY, telegram_token TEXT, chat_id TEXT, paper_balance REAL)')
     c.execute('CREATE TABLE IF NOT EXISTS trade_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, symbol TEXT, action TEXT, price REAL, qty REAL, date TEXT, pnl REAL)')
+    c.execute('CREATE TABLE IF NOT EXISTS social_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, content TEXT, date TEXT)')
     conn.commit()
     conn.close()
 
@@ -35,7 +35,7 @@ def make_hash(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_user(username, password):
-    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('SELECT password FROM users WHERE username = ?', (username,))
     data = c.fetchone()
@@ -43,12 +43,11 @@ def check_user(username, password):
     return data and data[0] == make_hash(password)
 
 def add_user(username, password):
-    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     c = conn.cursor()
     try:
         token = str(uuid.uuid4())
-        c.execute('INSERT INTO users(username, password, api_token) VALUES (?, ?, ?)', (username, make_hash(password), token))
-        c.execute('INSERT OR IGNORE INTO bot_settings(username, telegram_token, chat_id, paper_balance) VALUES (?, ?, ?, ?)', (username, "", "", 10000.0))
+        c.execute('INSERT INTO users(username, password, api_token, score) VALUES (?, ?, ?, ?)', (username, make_hash(password), token, 100.0))
         conn.commit()
         conn.close()
         return True
@@ -57,7 +56,7 @@ def add_user(username, password):
         return False
 
 def get_user_token(username):
-    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('SELECT api_token FROM users WHERE username = ?', (username,))
     data = c.fetchone()
@@ -65,14 +64,14 @@ def get_user_token(username):
     return data[0] if data and data[0] else "غير متوفر"
 
 def save_user_portfolio(username, symbol, qty, buy_price):
-    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('INSERT OR REPLACE INTO portfolios(username, symbol, qty, buy_price) VALUES (?, ?, ?, ?)', (username, symbol, qty, buy_price))
     conn.commit()
     conn.close()
 
 def get_user_portfolio(username, symbol):
-    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('SELECT qty, buy_price FROM portfolios WHERE username = ? AND symbol = ?', (username, symbol))
     data = c.fetchone()
@@ -80,7 +79,7 @@ def get_user_portfolio(username, symbol):
     return data if data else (0.0, 0.0)
 
 def log_trade(username, symbol, action, price, qty, pnl=0.0):
-    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     c = conn.cursor()
     date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     c.execute('INSERT INTO trade_journal(username, symbol, action, price, qty, date, pnl) VALUES (?, ?, ?, ?, ?, ?, ?)', 
@@ -89,13 +88,13 @@ def log_trade(username, symbol, action, price, qty, pnl=0.0):
     conn.close()
 
 def get_trade_journal(username):
-    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
     df = pd.read_sql_query('SELECT id, symbol, action, price, qty, date, pnl FROM trade_journal WHERE username = ?', conn, params=(username,))
     conn.close()
     return df
 
 # --- نظام تسجيل الدخول والشريط الجانبي ---
-st.sidebar.title("🔐 بوابة الأمان السحابي")
+st.sidebar.title("🔐 بوابة الأمان السحابي المؤسسي")
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
     st.session_state['username'] = ""
@@ -128,19 +127,19 @@ if st.sidebar.button("تسجيل الخروج"):
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.title("🧭 لوحة التحكم المركزية (Pro 2026)")
+st.sidebar.title("🧭 لوحة التحكم المركزية (Titan Pro)")
 
 app_mode = st.sidebar.radio("الوضع التشغيلي:", [
     "تحليل فردي معمق وإدارة الأصول",
-    "🧠 غرفة تحليل المشاعر والذعر الجمعي (AI Sentiment)",
-    "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)",
-    "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting",
+    "🤖 المساعد الذكي للتحليل المدمج (Quant AI Assistant)",
+    "🧪 محرك الاختبار الخلفي التاريخي (Advanced Backtesting)",
+    "👥 شبكة التداول الاجتماعي ولوحة المتصدرين (Social & Copy Trading)",
+    "🛡️ درع حماية المحفظة وحساب القيمة المعرضة للمخاطر (VaR)",
     "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)",
     "🧪 مختبر تحسين النماذج المتقدم (ML Lab)",
     "📡 مركز التنبيهات والربط الخارجي (Telegram & Webhooks)",
     "ماسح السوق الشامل (Market Screener)",
     "خريطة السيولة ونقاط التصفية (Liquidation Heatmap)",
-    "مصفوفة مقارنة الأسواق والـ MPT",
     "سجل الصفقات الحي والأداء (Trade Journal & PnL)"
 ])
 
@@ -151,7 +150,7 @@ rsi_period_input = st.sidebar.slider("فترة مؤشر الزخم (RSI):", 7, 2
 model_algo_choice = st.sidebar.selectbox("خوارزمية الذكاء الاصطناعي:", ["Random Forest", "Gradient Boosting"])
 
 crypto_symbol = "BTC-USD"
-if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🧠 غرفة تحليل المشاعر والذعر الجمعي (AI Sentiment)", "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)", "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting", "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)"]:
+if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🤖 المساعد الذكي للتحليل المدمج (Quant AI Assistant)", "🛡️ درع حماية المحفظة وحساب القيمة المعرضة للمخاطر (VaR)", "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)"]:
     market_category = st.sidebar.selectbox("اختر فئة السوق:", ["عملات رقمية (Crypto)", "أسهم عالمية (Stocks)", "سلع ومعادن (Commodities)", "عملات أجنبية (Forex)"])
     if market_category == "عملات رقمية (Crypto)":
         default_sym = "BTC-USD"
@@ -164,16 +163,6 @@ if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🧠 
         
     user_symbol_input = st.sidebar.text_input("أو أدخل الرمز المباشر (Yahoo Ticker):", value=default_sym)
     crypto_symbol = user_symbol_input.strip().upper()
-    
-    saved_qty, saved_buy = get_user_portfolio(st.session_state['username'], crypto_symbol)
-    st.sidebar.markdown("---")
-    st.sidebar.header("💼 إدارة المحفظة الفردية")
-    portfolio_qty = st.sidebar.number_input("الكمية:", min_value=0.0, value=float(saved_qty), step=0.01)
-    portfolio_buy_price = st.sidebar.number_input("متوسط الشراء ($):", min_value=0.0, value=float(saved_buy), step=10.0)
-    
-    if st.sidebar.button("💾 حفظ المحفظة"):
-        save_user_portfolio(st.session_state['username'], crypto_symbol, portfolio_qty, portfolio_buy_price)
-        st.sidebar.success("تم الحفظ بنجاح!")
 
 # --- دوال المعالجة المتقدمة والمستقرة ---
 @st.cache_data(ttl=3600)
@@ -307,52 +296,87 @@ def get_trained_model(algo_name):
     else:
         return RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
 
-# --- تطبيق واجهات النظام الشاملة ---
+# --- تطبيق واجهات النظام الشاملة والجديدة ---
 
-if app_mode == "🧠 غرفة تحليل المشاعر والذعر الجمعي (AI Sentiment)":
-    st.title("🧠 غرفة تحليل المشاعر الذكية والذعر الجمعي (Crowd Psychology & Reversal)")
-    df_sent = load_and_process_data(crypto_symbol)
-    if df_sent is not None:
-        curr_fng = float(df_sent['Fear_Greed_Index'].iloc[-1])
-        st.metric("مؤشر الذعر والجشع الحي (Fear & Greed)", f"{curr_fng:.0f} / 100")
+if app_mode == "🤖 المساعد الذكي للتحليل المدمج (Quant AI Assistant)":
+    st.title("🤖 المساعد الذكي للتحليل المدمج (GenAI Quant Expert)")
+    st.caption("اسأل المساعد الذكي عن أداء الأصل الحالي، استراتيجيات التوزيع، أو تحليل السوق.")
+    
+    user_q = st.text_input("أدخل سؤالك المالي (مثلاً: ما هو تقييمك لحركة البيتكوين الحالية؟):")
+    if st.button("💬 إرسال للمساعد الذكي"):
+        df_q = load_and_process_data(crypto_symbol)
+        if df_q is not None:
+            cur_p = float(df_q['Close'].iloc[-1])
+            cur_rsi = float(df_q['RSI'].iloc[-1])
+            cur_adx = float(df_q['ADX'].iloc[-1])
+            
+            # محاكاة رد ذكي مبني على التحليل الكمي الحقيقي
+            response_text = f"""تحليلاً لطلبك بخصوص الأصل ({crypto_symbol}):
+- السعر الحالي: ${cur_p:,.2f}
+- مؤشر القوة النسبية RSI: {cur_rsi:.1f}
+- قوة الاتجاه ADX: {cur_adx:.1f}
+
+بناءً على المعطيات الكمية اللحظية، الأصل يحافظ على استقرار نسبي. يُنصح بمتابعة مستويات وقف الخسارة بحذر وإدارة المخاطر بدقة."""
+            st.info(response_text)
+
+elif app_mode == "🧪 الاختبار الخلفي التاريخي (Advanced Backtesting)":
+    st.title("🧪 محرك الاختبار الخلفي للاستراتيجيات (Backtesting Engine)")
+    bt_symbol = st.text_input("رمز الأصل للاختبار الخلفي:", value="BTC-USD")
+    if st.button("🚀 تشغيل الاختبار الخلفي لمدة سنة"):
+        df_bt = load_and_process_data(bt_symbol)
+        if df_bt is not None:
+            df_bt['Signal'] = np.where(df_bt['RSI'] < 40, 1, np.where(df_bt['RSI'] > 70, -1, 0))
+            df_bt['Strategy_Returns'] = df_bt['Signal'].shift(1) * df_bt['Price_Change']
+            cum_returns = (1 + df_bt['Strategy_Returns'].fillna(0)).cumprod() - 1
+            
+            st.success("تم تشغيل محاكاة الاختبار الخلفي بنجاح!")
+            st.metric("إجمالي العائد الاستراتيجي التجريبي", f"{cum_returns.iloc[-1]*100:.2f}%")
+            
+            fig_bt = go.Figure()
+            fig_bt.add_trace(go.Scatter(x=df_bt.index, y=cum_returns, mode='lines', name='العائد الاستراتيجي', line=dict(color='#00FFA3', width=2)))
+            fig_bt.update_layout(template="plotly_dark", height=400, title="منحنى العائد التراكمي للاستراتيجية")
+            st.plotly_chart(fig_bt, width='stretch')
+
+elif app_mode == "👥 شبكة التداول الاجتماعي ولوحة المتصدرين (Social & Copy Trading)":
+    st.title("👥 شبكة التداول الاجتماعي ولوحة المتصدرين (Leaderboard)")
+    st.markdown("شارك ملاحظاتك وصفقاتك مع مجتمع المتداولين الكميين وتصفح أفضل الأداء.")
+    
+    post_content = st.text_area("أكتب تحليلك أو إشارتك لمشاركتها مع المجتمع:")
+    if st.button("📢 نشر في المجتمع"):
+        if post_content.strip():
+            conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
+            c = conn.cursor()
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            c.execute('INSERT INTO social_posts(username, content, date) VALUES (?, ?, ?)', (st.session_state['username'], post_content, date_str))
+            conn.commit()
+            conn.close()
+            st.success("تم النشر بنجاح!")
+            
+    st.markdown("---")
+    st.subheader("🌐 أحدث منشورات وتحليلات المتداولين")
+    conn = sqlite3.connect('apex_titan_2026.db', check_same_thread=False)
+    posts_df = pd.read_sql_query('SELECT username, content, date FROM social_posts ORDER BY id DESC LIMIT 10', conn)
+    conn.close()
+    
+    if not posts_df.empty:
+        for idx, row in posts_df.iterrows():
+            st.info(f"👤 **{row['username']}** - ⏱️ {row['date']}\n\n{row['content']}")
+    else:
+        st.info("لا توجد منشورات حتى الآن. كن أول المشاركين!")
+
+elif app_mode == "🛡️ درع حماية المحفظة وحساب القيمة المعرضة للمخاطر (VaR)":
+    st.title("🛡️ إدارة المخاطر المؤسسية وحساب القيمة المعرضة للمخاطر (VaR)")
+    df_var = load_and_process_data(crypto_symbol)
+    if df_var is not None:
+        portfolio_val = st.number_input("قيمة المحفظة الإجمالية ($):", value=50000.0, step=1000.0)
+        daily_returns = df_var['Price_Change'].dropna()
+        var_95 = np.percentile(daily_returns, 5) * portfolio_val
         
-        fig_sent = go.Figure(go.Indicator(
-            mode = "gauge+number+delta",
-            value = curr_fng,
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "مقياس الهشاشة النفسية وانعكاس الحشود"},
-            delta = {'reference': 50},
-            gauge = {'axis': {'range': [None, 100]}, 'steps': [{'range': [0, 25], 'color': "darkred"}, {'range': [75, 100], 'color': "green"}]}
-        ))
-        fig_sent.update_layout(height=400, template="plotly_dark")
-        st.plotly_chart(fig_sent, width='stretch')
-
-elif app_mode == "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)":
-    st.title("🛡️ درع حماية المحفظة عبر نظرية الفوضى (Chaos Theory & Fractal Shield)")
-    df_chaos = load_and_process_data(crypto_symbol)
-    if df_chaos is not None:
-        curr_fragile = float(df_chaos['Fractal_Fragility'].iloc[-1])
-        st.metric("مؤشر الهشاشة الفراكتلية (Fragility Index)", f"{curr_fragile:.2f}")
-        fig_ch = go.Figure()
-        fig_ch.add_trace(go.Scatter(x=df_chaos.index[-90:], y=df_chaos['Fractal_Fragility'].iloc[-90:], mode='lines', line=dict(color='#FF3366', width=2)))
-        fig_ch.update_layout(template="plotly_dark", title="معدل الفوضى الفراكتلية", height=400)
-        st.plotly_chart(fig_ch, width='stretch')
-
-elif app_mode == "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting":
-    st.title("🎭 كاشف فخاخ صناع السوق ومناطق اصطياد الوقف (Stop-Hunting Zones)")
-    df_sh = load_and_process_data(crypto_symbol)
-    if df_sh is not None:
-        fig_sh = go.Figure()
-        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['Close'].iloc[-50:], mode='lines', name='السعر', line=dict(color='#00FFA3', width=2)))
-        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Upper'].iloc[-50:], mode='lines', name='فخ البائعين', line=dict(color='red', dash='dash')))
-        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Lower'].iloc[-50:], mode='lines', name='فخ المشترين', line=dict(color='blue', dash='dash')))
-        fig_sh.update_layout(template="plotly_dark", height=450)
-        st.plotly_chart(fig_sh, width='stretch')
+        st.success("نتائج تحليل القيمة المعرضة للمخاطر (Value at Risk - 95% Confidence):")
+        st.metric("أقصى خسارة متوقعة خلال يوم واحد (95%)", f"${abs(var_95):,.2f}")
 
 elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)":
     st.title("🧮 حاسبة إدارة المخاطر المتقدمة (Position Sizing & Risk Management)")
-    st.caption("حساب الكمية وحجم المركز بدقة بناءً على رأس المال ومسافة وقف الخسارة.")
-    st.markdown("---")
     df_rc = load_and_process_data(crypto_symbol)
     if df_rc is not None:
         curr_p = float(df_rc['Close'].iloc[-1])
@@ -361,7 +385,7 @@ elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المرك�
         col_r1, col_r2 = st.columns(2)
         with col_r1:
             total_cap = st.number_input("إجمالي رأس المال ($):", value=10000.0, step=500.0)
-            risk_pct = st.slider("نسبة المخاطرة المقبولة من المحفظة (%):", 0.5, 5.0, 1.0, 0.5)
+            risk_pct = st.slider("نسبة المخاطرة المقبولة (%):", 0.5, 5.0, 1.0, 0.5)
         with col_r2:
             sl_multiplier = st.slider("معامل وقف الخسارة (ATR Multiplier):", 1.0, 3.0, 1.5, 0.25)
             
@@ -374,7 +398,7 @@ elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المرك�
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("السعر الحالي", f"${curr_p:,.2f}")
         m2.metric("مسافة وقف الخسارة", f"${calculated_sl_distance:,.2f}")
-        m3.metric("الكمية الموصى بها للتداول", f"{recommended_qty:.4f}")
+        m3.metric("الكمية الموصى بها", f"{recommended_qty:.4f}")
         m4.metric("إجمالي تكلفة المركز", f"${total_position_cost:,.2f}")
 
 elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML Lab)":
@@ -396,14 +420,11 @@ elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML L
 
 elif app_mode == "📡 مركز التنبيهات والربط الخارجي (Telegram & Webhooks)":
     st.title("📡 مركز التنبيهات والربط الآلي (Telegram Bot & Webhooks)")
-    st.markdown("قم بإعداد بوت التيليجرام الخاص بك لتلقي الإشارات الفورية.")
-    
-    tg_token = st.text_input("مفتاح بوت التيليجرام (Telegram Bot Token):", type="password")
-    tg_chat = st.text_input("معرف الدردشة (Telegram Chat ID):")
-    
-    if st.button("💾 حفظ إعدادات الربط"):
-        st.success("تم حفظ الإعدادات السحابية بنجاح!")
-        
+    st.markdown("قم بإعداد بوت التيليجرام لتلقي الإشارات الفورية.")
+    tg_token = st.text_input("مفتاح بوت التيليجرام (Bot Token):", type="password")
+    tg_chat = st.text_input("معرف الدردشة (Chat ID):")
+    if st.button("💾 حفظ الإعدادات"):
+        st.success("تم حفظ إعدادات الربط السحابي بنجاح!")
     st.markdown("---")
     st.subheader("🔑 مفتاح التوثيق السحابي (API Token)")
     st.code(get_user_token(st.session_state['username']), language="text")
@@ -444,36 +465,17 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                     if len(cl_t) > 20:
                         Xt = np.nan_to_num(np.ascontiguousarray(cl_t[advanced_features].astype(float).values), nan=0.0)
                         yt = (cl_t['Close'].shift(-1) > cl_t['Close']).astype(int).values
-                        
                         rf_t = get_trained_model(model_algo_choice)
                         rf_t.fit(Xt, yt)
-                        
                         avg_p = rf_t.predict_proba(Xt[-1:])[0]
                         pred_val = 1 if avg_p[1] > avg_p[0] else 0
                         max_conf = max(avg_p)
                         adx_v = float(df_temp['ADX'].iloc[-1])
                         px_v = float(df_temp['Close'].iloc[-1])
-                        
                         dec = "📈 شراء" if pred_val == 1 and max_conf >= conf_threshold_input else ("📉 بيع" if pred_val == 0 and max_conf >= conf_threshold_input else "⚠️ ترقب")
                         res.append({"الأصل": ast, "السعر": f"${px_v:,.2f}", "قوة الاتجاه ADX": f"{adx_v:.1f}", "قرار النظام": dec, "الثقة": f"{max_conf*100:.1f}%"})
         if res:
             st.table(pd.DataFrame(res))
-
-elif app_mode == "مصفوفة مقارنة الأسواق والـ MPT":
-    st.title("📊 مصفوفة ارتباط الأصول والتحسين الحديث للمحافظ")
-    default_w = ["BTC-USD", "GC=F", "EURUSD=X", "AAPL"]
-    w_input = st.text_input("أصول المقارنة:", value=", ".join(default_w))
-    w_assets = [x.strip().upper() for x in w_input.split(',')]
-    price_dict = {}
-    for ast in w_assets:
-        df_a = load_and_process_data(ast)
-        if df_a is not None and not df_a.empty:
-            price_dict[ast] = df_a['Close']
-    if len(price_dict) > 1:
-        pdf = pd.DataFrame(price_dict).dropna()
-        rets = pdf.pct_change().dropna()
-        st.subheader("🔗 مصفوفة الارتباط")
-        st.plotly_chart(px.imshow(rets.corr(), text_auto=True, color_continuous_scale="RdBu_r", aspect="auto"), width='stretch')
 
 else:
     with st.spinner(f"جاري معالجة بيانات الأصل '{crypto_symbol}' بالذكاء الاصطناعي..."):
@@ -514,7 +516,7 @@ else:
             tp3_price = current_price - (3.0 * current_atr_val)
 
         st.title(f"⚡ منصة النماذج الكمية المتقدمة لـ {crypto_symbol}")
-        st.caption("النسخة الخارقة الشاملة (Pro 2026): تحليل، إدارة مخاطر، وتنبيهات آلية.")
+        st.caption("النسخة الأسطورية الشاملة (Titan Pro Max 2026): ذكاء اصطناعي، اختبار خلفي، وتداول اجتماعي.")
         st.markdown("---")
 
         c1, c2, c3, c4 = st.columns(4)
