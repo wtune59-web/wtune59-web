@@ -450,15 +450,28 @@ elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal &
 
 elif app_mode == "ماسح السوق الشامل (Market Screener)":
     st.title("🗺️ ماسح السوق الشامل لعملات الذكاء الاصطناعي والفرص الرقمية")
-    st.caption("فحص ذكي لأقوى مشاريع البلوكشين والذكاء الاصطناعي عبر خوارزميات التنبؤ اللحظي.")
+    st.caption("فحص ذكي لأبرز 100 عملة رقمية عبر خوارزميات التنبؤ اللحظي.")
     
-    default_ai_crypto_list = ["RENDER-USD", "FET-USD", "NEAR-USD", "BTC-USD", "ETH-USD", "SOL-USD"]
+    # قائمة تضم أشهر وأبرز 100 عملة رقمية في السوق
+    default_ai_crypto_list = [
+        "BTC-USD", "ETH-USD", "USDT-USD", "XRP-USD", "BNB-USD", "SOL-USD", "USDC-USD", "ADA-USD", "DOGE-USD", "TRX-USD",
+        "AVAX-USD", "SUI-USD", "LINK-USD", "SHIB-USD", "BCH-USD", "XLM-USD", "NEAR-USD", "LTC-USD", "UNI-USD",
+        "APT-USD", "ICP-USD", "FET-USD", "RENDER-USD", "POL-USD", "STX-USD", "ATOM-USD", "IMX-USD", "GRT-USD",
+        "INJ-USD", "TAO-USD", "TIA-USD", "SEI-USD", "OP-USD", "ARB-USD", "KAS-USD", "HBAR-USD", "VET-USD", "MKR-USD",
+        "ALGO-USD", "FTM-USD", "RUNE-USD", "AR-USD", "FLR-USD", "THETA-USD", "BONK-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD",
+        "JUP-USD", "PYTH-USD", "STRK-USD", "AXS-USD", "SAND-USD", "MANA-USD", "GALA-USD", "ENJ-USD", "CHZ-USD", "FLOW-USD",
+        "EGLD-USD", "AAVE-USD", "CRV-USD", "SNX-USD", "COMP-USD", "LDO-USD", "PENDLE-USD", "JTO-USD", "WLD-USD", "BLUR-USD",
+        "DYDX-USD", "GMX-USD", "CAKE-USD", "SUSHI-USD", "1INCH-USD", "BAT-USD", "ZRX-USD", "KNC-USD", "BAL-USD", "YFI-USD",
+        "OCEAN-USD", "AGIX-USD", "AKT-USD", "IO-USD", "ROSE-USD", "RLC-USD", "SKL-USD", "CTSI-USD", "ANKR-USD",
+        "STORJ-USD", "BTT-USD", "HOT-USD", "IOST-USD", "QTUM-USD", "ZIL-USD", "DASH-USD", "ZEC-USD", "XMR-USD", "BSV-USD"
+    ]
+    
     s_input = st.text_input("الأصول المراد فحصها (Yahoo Tickers):", value=", ".join(default_ai_crypto_list))
     assets_l = [x.strip().upper() for x in s_input.split(',')]
     
     if st.button("🚀 تشغيل الماسح الشامل"):
         res = []
-        with st.spinner("جاري تحليل أسواق الذكاء الاصطناعي والسيولة اللحظية..."):
+        with st.spinner("جاري تحليل الأسواق والسيولة اللحظية لجميع الأصول..."):
             for ast in assets_l:
                 df_temp = load_and_process_data(ast, rsi_window=rsi_period_input)
                 if df_temp is not None and not df_temp.empty:
