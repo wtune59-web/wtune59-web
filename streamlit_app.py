@@ -10,7 +10,7 @@ import hashlib
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title="Global Quant SaaS Platform",
+    page_title="Global Quant SaaS Platform - Optimized",
     page_icon="⚡",
     layout="wide"
 )
@@ -108,7 +108,6 @@ if not st.session_state['logged_in']:
                 st.sidebar.error("اسم المستخدم مستخدم مسبقاً.")
     st.stop()
 
-# إذا كان المستخدم مسجلاً دخولاً
 st.sidebar.success(f"مرحباً بك، {st.session_state['username']} 👋")
 if st.sidebar.button("تسجيل الخروج"):
     st.session_state['logged_in'] = False
@@ -118,7 +117,6 @@ if st.sidebar.button("تسجيل الخروج"):
 st.sidebar.markdown("---")
 st.sidebar.title("⚡ لوحة التحكم المتقدمة")
 
-# خيار وضع التصفح: تحليل فردي معمق أو مصفوفة مقارنة متعددة الأصول
 app_mode = st.sidebar.radio("🧭 وضع المنصة:", ["تحليل فردي معمق", "مصفوفة مقارنة الأصول (Multi-Asset)"])
 
 crypto_symbol = "BTC-USD"
@@ -126,7 +124,6 @@ if app_mode == "تحليل فردي معمق":
     user_symbol_input = st.sidebar.text_input("🔍 أدخل رمز الأصل:", value="BTC-USD")
     crypto_symbol = user_symbol_input.strip().upper()
     
-    # جلب المحفظة المحفوظة للمستخدم لهذا الأصل
     saved_qty, saved_buy = get_user_portfolio(st.session_state['username'], crypto_symbol)
     st.sidebar.markdown("---")
     st.sidebar.header("💼 إدارة محفظتك السحابية")
@@ -142,7 +139,7 @@ st.sidebar.header("💡 شراكات المنصات")
 st.sidebar.markdown("[🔗 سجل في Binance واحصل على خصم](https://accounts.binance.com/register?ref=YOUR_REF_ID)")
 
 
-# --- دوال جلب وتحليل البيانات ---
+# --- دوال جلب وتحليل البيانات (مع تخزين مؤقت قوي لتقليل الضغط على المعالج) ---
 @st.cache_data(ttl=3600)
 def get_fear_and_greed():
     try:
@@ -155,10 +152,11 @@ def get_fear_and_greed():
     except:
         return None
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=3600)
 def load_and_process_data(symbol):
     try:
-        data = yf.download(symbol, period='3y', progress=False)
+        # تقليل الفترة الزمنية إلى سنة ونصف بدلاً من 3 سنوات لتسريع المعالجة وتقليل استهلاك المعالج
+        data = yf.download(symbol, period='1.5y', progress=False)
         if data.empty:
             return None
         if isinstance(data.columns, pd.MultiIndex):
@@ -207,22 +205,22 @@ def load_and_process_data(symbol):
     except:
         return None
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=3600)
 def get_news_sentiment(symbol):
     try:
         ticker_base = symbol.split('-')[0]
         rss_url = f"https://finance.yahoo.com/rss/headline?s={ticker_base}"
         headers = {'User-Agent': 'Mozilla/5.0'}
-        resp = requests.get(rss_url, headers=headers, timeout=5)
+        resp = requests.get(rss_url, headers=headers, timeout=3)
         
         if resp.status_code == 200:
             root = ET.fromstring(resp.content)
             titles = [elem.text for elem in root.iter('title') if elem.text]
-            positive_words = ['surge', 'jump', 'gain', 'bull', 'rally', 'high', 'growth', 'up', 'ارتفاع', 'صعود']
-            negative_words = ['drop', 'fall', 'crash', 'bear', 'loss', 'down', 'risk', 'dip', 'هبوط', 'انخفاض']
+            positive_words = ['surge', 'jump', 'gain', 'bull', 'rally', 'high', 'growth', 'up']
+            negative_words = ['drop', 'fall', 'crash', 'bear', 'loss', 'down', 'risk']
             
             score = 0
-            for title in titles[:10]:
+            for title in titles[:5]:
                 t_lower = title.lower()
                 for p in positive_words:
                     if p in t_lower: score += 1
@@ -236,10 +234,44 @@ def get_news_sentiment(symbol):
         return "محايد ⚪", ["تعذر جلب الأخبار الحية."]
 
 
-# --- التنفيذ بناءً على وضع التطبيق المختار ---
+# --- دالة تحليل سريعة مخزنة مؤقتاً للمصفوفة لمنع استهلاك المعالج ---
+@st.cache_data(ttl=3600)
+def analyze_asset_fast(asset):
+    df_asset = load_and_process_data(asset)
+    if df_asset is not None and not df_asset.empty:
+        features = [
+            'Price_Change', 'Volume_Change', 'Lag_1', 'Lag_2', 'Lag_3',
+            'SMA_Ratio', 'RSI', 'Fear_Greed_Index', 'BB_Width', 'MACD', 'MACD_Signal'
+        ]
+        clean = df_asset.dropna()
+        if len(clean) > 30:
+            X_c = clean[features]
+            y_c = (clean['Close'].shift(-1) > clean['Close']).astype(int)
+            valid = y_c.dropna().index
+            
+            # نموذج خفيف جداً لتقليل استهلاك المعالج (CPU)
+            model_c = XGBClassifier(n_estimators=50, max_depth=2, learning_rate=0.05, random_state=42)
+            model_c.fit(X_c.loc[valid], y_c.loc[valid])
+            
+            pred_c = model_c.predict(X_c.iloc[-1:])[0]
+            prob_c = model_c.predict_proba(X_c.iloc[-1:])[0]
+            max_p = max(prob_c)
+            
+            decision = "📈 شراء (صعود)" if pred_c == 1 and max_p >= 0.58 else ("📉 بيع / تجنب" if pred_c == 0 and max_p >= 0.58 else "⚠️ ترقب (حياد)")
+            
+            return {
+                "الأصل": asset,
+                "السعر الحالي ($)": f"${float(df_asset['Close'].iloc[-1]):,.2f}",
+                "مؤشر RSI": f"{float(df_asset['RSI'].iloc[-1]):.1f}",
+                "قرار النظام": decision,
+                "نسبة الثقة": f"{max_p*100:.1f}%"
+            }
+    return None
+
+
 if app_mode == "مصفوفة مقارنة الأصول (Multi-Asset)":
-    st.title("📊 مصفوفة المقارنة الفورية متعددة الأصول")
-    st.caption("قارن أداء وتوقعات الذكاء الاصطناعي لعدة عملات وأسهم عالمية دفعة واحدة.")
+    st.title("📊 مصفوفة المقارنة الفورية متعددة الأصول (محسنة السرعة)")
+    st.caption("نتائج مخزنة مؤقتاً لضمان عدم استهلاك موارد المعالج وسرعة الاستجابة.")
     st.markdown("---")
     
     default_watchlist = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AAPL", "TSLA"]
@@ -247,46 +279,18 @@ if app_mode == "مصفوفة مقارنة الأصول (Multi-Asset)":
     assets = [a.strip().upper() for a in watchlist_input.split(',')]
     
     comparison_data = []
-    
-    with st.spinner("جاري تحليل ومقارنة الأصول عبر الذكاء الاصطناعي..."):
+    with st.spinner("جاري جلب البيانات المعالجة مؤقتاً..."):
         for asset in assets:
-            df_asset = load_and_process_data(asset)
-            if df_asset is not None and not df_asset.empty:
-                features = [
-                    'Price_Change', 'Volume_Change', 'Lag_1', 'Lag_2', 'Lag_3',
-                    'SMA_Ratio', 'RSI', 'Fear_Greed_Index', 'BB_Width', 'MACD', 'MACD_Signal'
-                ]
-                clean = df_asset.dropna()
-                if len(clean) > 50:
-                    X_c = clean[features]
-                    y_c = (clean['Close'].shift(-1) > clean['Close']).astype(int)
-                    valid = y_c.dropna().index
-                    
-                    model_c = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.02, random_state=42)
-                    model_c.fit(X_c.loc[valid], y_c.loc[valid])
-                    
-                    pred_c = model_c.predict(X_c.iloc[-1:])[0]
-                    prob_c = model_c.predict_proba(X_c.iloc[-1:])[0]
-                    max_p = max(prob_c)
-                    
-                    decision = "📈 شراء (صعود)" if pred_c == 1 and max_p >= 0.58 else ("📉 بيع / تجنب" if pred_c == 0 and max_p >= 0.58 else "⚠️ ترقب (حياد)")
-                    
-                    comparison_data.append({
-                        "الأصل": asset,
-                        "السعر الحالي ($)": f"${float(df_asset['Close'].iloc[-1]):,.2f}",
-                        "مؤشر RSI": f"{float(df_asset['RSI'].iloc[-1]):.1f}",
-                        "قرار النظام": decision,
-                        "نسبة الثقة": f"{max_p*100:.1f}%"
-                    })
-                    
+            res = analyze_asset_fast(asset)
+            if res:
+                comparison_data.append(res)
+                
     if comparison_data:
-        comp_df = pd.DataFrame(comparison_data)
-        st.table(comp_df)
+        st.table(pd.DataFrame(comparison_data))
     else:
         st.warning("لم يتم العثور على بيانات كافية للأصول المدخلة.")
 
 else:
-    # وضع التحليل الفردي المعمق
     with st.spinner(f"جاري تحميل التحليل المعرفي لـ {crypto_symbol}..."):
         data = load_and_process_data(crypto_symbol)
         sentiment_label, news_headlines = get_news_sentiment(crypto_symbol)
@@ -304,7 +308,7 @@ else:
         y = (clean_data['Close'].shift(-1) > clean_data['Close']).astype(int)
         
         valid_idx = y.dropna().index
-        model = XGBClassifier(n_estimators=200, max_depth=4, learning_rate=0.015, subsample=0.8, colsample_bytree=0.8, random_state=42)
+        model = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.02, random_state=42)
         model.fit(X.loc[valid_idx], y.loc[valid_idx])
 
         today_features = data[features].iloc[-1:]
@@ -318,10 +322,9 @@ else:
         confidence_threshold = 0.58
 
         st.title(f"🧠 منصة التحليل المعرفي لـ {crypto_symbol}")
-        st.caption("نظام مؤسسي متكامل مزود بقاعدة بيانات سحابية لحفظ المحافظ ومصفوفة التحليل المتقدم.")
+        st.caption("نظام محسن لتقليل استهلاك المعالج وتوفير أقصى سرعة أداء.")
         st.markdown("---")
 
-        # 1. التوصية المعرفية
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric(label="💵 السعر الحالي", value=f"${current_price:,.2f}")
@@ -337,7 +340,6 @@ else:
             else:
                 st.metric(label="🔮 قرار النظام", value="📉 بيع / تجنب", delta=f"الثقة: {max_prob*100:.1f}%", delta_color="inverse")
 
-        # 2. التقرير الاستشاري التفسيري
         st.markdown("---")
         st.subheader("📝 التقرير الاستشاري التفسيري للذكاء الاصطناعي")
         rsi_status = "في مناطق التشبع البيعي (مرتد محتمل)" if current_rsi < 35 else ("في مناطق التشبع الشرايي (حذر مطلوب)" if current_rsi > 65 else "في مستويات متوازنة")
@@ -349,7 +351,6 @@ else:
         > * **الخلاصة:** قدر نموذج الـ XGBoost الثقة بـ **{max_prob*100:.1f}%**، والقرار السحابي المعتمد هو: **{"شراء" if prediction == 1 and max_prob >= confidence_threshold else ("بيع" if prediction == 0 and max_prob >= confidence_threshold else "ترقب وحياد")}**.
         """)
 
-        # 3. محفظة الأصول السحابية
         st.markdown("---")
         st.subheader("💼 أداء محفظتك السحابية للأصل الحالي")
         if portfolio_qty > 0:
@@ -366,9 +367,8 @@ else:
             with p3:
                 st.metric(label="الأرباح / الخسائر (PnL)", value=f"${pnl_d:,.2f}", delta=f"{pnl_p:.2f}%")
         else:
-            st.info("أدخل كمية وسعر الشراء في الشريط الجانبي واضغط 'حفظ تعديلات المحفظة' لتتبع أرباحك على مدار الساعة.")
+            st.info("أدخل كمية وسعر الشراء في الشريط الجانبي واضغط 'حفظ تعديلات المحفظة' لتتبع أرباحك.")
 
-        # 4. الاختبار العكسي للاستراتيجية
         st.markdown("---")
         st.subheader("🧪 محرك الاختبار العكسي التاريخي (Backtest Performance)")
         clean_data['Model_Pred'] = model.predict(X)
@@ -382,7 +382,6 @@ else:
         }, index=clean_data.index)
         st.line_chart(backtest_df)
 
-        # 5. الرسوم الفنية والأخبار
         st.markdown("---")
         col_g1, col_g2 = st.columns([2, 1])
         with col_g1:
