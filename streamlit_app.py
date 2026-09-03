@@ -139,7 +139,7 @@ if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🤖 
     market_category = st.sidebar.selectbox("اختر فئة السوق:", ["عملات الذكاء الاصطناعي (AI Crypto)", "عملات رقمية عامة (Crypto)", "أسهم عالمية (Stocks)"])
     
     if market_category == "عملات الذكاء الاصطناعي (AI Crypto)":
-        default_sym = "TAO-USD"
+        default_sym = "RENDER-USD"
     elif market_category == "عملات رقمية عامة (Crypto)":
         default_sym = "BTC-USD"
     else:
@@ -178,7 +178,6 @@ def get_vix_data():
 @st.cache_data(ttl=3600)
 def load_and_process_data(symbol, rsi_window=14):
     try:
-        # جلب البيانات مع حماية كاملة ضد توقف السيرفر
         data = yf.download(symbol, period='1y', progress=False)
         
         if data is None or data.empty:
@@ -310,11 +309,11 @@ if app_mode == "🤖 المساعد الذكي للتحليل المدمج (Quan
 بناءً على المعطيات الكمية اللحظية، الأصل يحافظ على استقرار نسبي."""
             st.info(response_text)
         else:
-            st.error(f"عذراً، تعذر جلب بيانات الرمز '{crypto_symbol}'. حاول التأكد من صحة الرمز أو اختيار أصل بديل.")
+            st.error(f"عذراً، تعذر جلب بيانات الرمز '{crypto_symbol}'. تأكد من الرمز أو جرب رمزاً آخر.")
 
 elif app_mode == "🧪 محرك الاختبار الخلفي التاريخي (Advanced Backtesting)":
     st.title("🧪 محرك الاختبار الخلفي للاستراتيجيات (Backtesting Engine)")
-    bt_symbol = st.text_input("رمز الأصل للاختبار الخلفي:", value="TAO-USD")
+    bt_symbol = st.text_input("رمز الأصل للاختبار الخلفي:", value="RENDER-USD")
     if st.button("🚀 تشغيل الاختبار الخلفي لمدة سنة"):
         df_bt = load_and_process_data(bt_symbol)
         if df_bt is not None and not df_bt.empty:
@@ -400,7 +399,7 @@ elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المرك�
 
 elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML Lab)":
     st.title("🧪 مختبر النماذج المتقدم وتحسين الـ Hyperparameters")
-    lab_symbol = st.text_input("رمز الأصل للاختبار:", value="TAO-USD")
+    lab_symbol = st.text_input("رمز الأصل للاختبار:", value="RENDER-USD")
     if st.button("🚀 تشغيل الاختبار والتدريب المتقدم"):
         df_lb = load_and_process_data(lab_symbol)
         if df_lb is not None and not df_lb.empty:
@@ -429,7 +428,7 @@ elif app_mode == "📡 مركز التنبيهات والربط الخارجي (
 
 elif app_mode == "خريطة السيولة ونقاط التصفية (Liquidation Heatmap)":
     st.title("🌊 خريطة سيولة السوق ونقاط التصفية (Liquidation Pools)")
-    hm_symbol = st.text_input("رمز الأصل لخريطة السيولة:", value="TAO-USD")
+    hm_symbol = st.text_input("رمز الأصل لخريطة السيولة:", value="RENDER-USD")
     if st.button("🗺️ توليد خريطة السيولة"):
         df_hm = load_and_process_data(hm_symbol)
         if df_hm is not None and not df_hm.empty:
@@ -453,7 +452,7 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
     st.title("🗺️ ماسح السوق الشامل لعملات الذكاء الاصطناعي والفرص الرقمية")
     st.caption("فحص ذكي لأقوى مشاريع البلوكشين والذكاء الاصطناعي عبر خوارزميات التنبؤ اللحظي.")
     
-    default_ai_crypto_list = ["TAO-USD", "RENDER-USD", "FET-USD", "NEAR-USD", "BTC-USD", "ETH-USD", "SOL-USD"]
+    default_ai_crypto_list = ["RENDER-USD", "FET-USD", "NEAR-USD", "BTC-USD", "ETH-USD", "SOL-USD"]
     s_input = st.text_input("الأصول المراد فحصها (Yahoo Tickers):", value=", ".join(default_ai_crypto_list))
     assets_l = [x.strip().upper() for x in s_input.split(',')]
     
@@ -495,7 +494,7 @@ else:
         data = load_and_process_data(crypto_symbol, rsi_window=rsi_period_input)
 
     if data is None or data.empty:
-        st.error(f"⚠️ عذراً، تعذر جلب البيانات للرمز '{crypto_symbol}'. يرجى التحقق من صحة الرمز (مثلاً TAO-USD أو BTC-USD) أو المحاولة لاحقاً.")
+        st.error(f"⚠️ عذراً، تعذر جلب البيانات للرمز '{crypto_symbol}'. يرجى التحقق من صحة الرمز أو اختيار أصل آخر.")
     else:
         clean_data = data.dropna()
         X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0)
