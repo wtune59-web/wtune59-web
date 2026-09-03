@@ -1,2 +1,6 @@
 streamlit
+yfinance
+xgboost
+scikit-learn
 pandas
+requests
