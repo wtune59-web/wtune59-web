@@ -227,10 +227,14 @@ def load_and_process_data(symbol, rsi_window=14):
         dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
         data['ADX'] = dx.rolling(14).mean().fillna(20)
         
+        # Bollinger Bands (تم إضافتها لتجنب خطأ الكีย์)
+        data['BB_Middle'] = data['Close'].rolling(20).mean()
+        data['BB_Std'] = data['Close'].rolling(20).std()
+        data['BB_Upper'] = data['BB_Middle'] + (data['BB_Std'] * 2)
+        data['BB_Lower'] = data['BB_Middle'] - (data['BB_Std'] * 2)
+        
         # محرك تقدير وتصفيات السيولة (Estimated Liquidation Index)
-        # يعتمد على التغير المفاجئ في الحجم مقارنة بالمدى السعري لضرب عقود الرافعة المالية
         data['Estimated_Liquidations'] = (data['Volume'] * np.abs(data['Price_Change']) * data['VIX']).rolling(5).mean()
-        # تطبيع مؤشر التصفيات ليكون بين 0 و 100
         liq_min = data['Estimated_Liquidations'].min()
         liq_max = data['Estimated_Liquidations'].max()
         data['Liquidation_Index'] = 100 * (data['Estimated_Liquidations'] - liq_min) / (liq_max - liq_min + 1e-9)
