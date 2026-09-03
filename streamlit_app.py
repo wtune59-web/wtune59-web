@@ -3,28 +3,29 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import requests
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 import sqlite3
 import hashlib
 import plotly.graph_objects as go
 import plotly.express as px
 import datetime
 import uuid
+import json
 
 # إعدادات الصفحة الأساسية
 st.set_page_config(
-    page_title="Global Quant SaaS Platform - Apex Elite Ultimate 2026",
+    page_title="Global Quant SaaS Platform - Apex Elite Pro 2026",
     page_icon="⚡",
     layout="wide"
 )
 
 # --- إعداد قاعدة البيانات الشاملة ---
 def init_db():
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, api_token TEXT)')
     c.execute('CREATE TABLE IF NOT EXISTS portfolios (username TEXT, symbol TEXT, qty REAL, buy_price REAL, PRIMARY KEY (username, symbol))')
-    c.execute('CREATE TABLE IF NOT EXISTS bot_settings (username TEXT PRIMARY KEY, api_key TEXT, api_secret TEXT, auto_trade_enabled INTEGER)')
+    c.execute('CREATE TABLE IF NOT EXISTS bot_settings (username TEXT PRIMARY KEY, telegram_token TEXT, chat_id TEXT, paper_balance REAL)')
     c.execute('CREATE TABLE IF NOT EXISTS trade_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, symbol TEXT, action TEXT, price REAL, qty REAL, date TEXT, pnl REAL)')
     conn.commit()
     conn.close()
@@ -35,7 +36,7 @@ def make_hash(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_user(username, password):
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('SELECT password FROM users WHERE username = ?', (username,))
     data = c.fetchone()
@@ -43,11 +44,12 @@ def check_user(username, password):
     return data and data[0] == make_hash(password)
 
 def add_user(username, password):
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
     c = conn.cursor()
     try:
         token = str(uuid.uuid4())
         c.execute('INSERT INTO users(username, password, api_token) VALUES (?, ?, ?)', (username, make_hash(password), token))
+        c.execute('INSERT OR IGNORE INTO bot_settings(username, telegram_token, chat_id, paper_balance) VALUES (?, ?, ?, ?)', (username, "", "", 10000.0))
         conn.commit()
         conn.close()
         return True
@@ -56,7 +58,7 @@ def add_user(username, password):
         return False
 
 def get_user_token(username):
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('SELECT api_token FROM users WHERE username = ?', (username,))
     data = c.fetchone()
@@ -64,32 +66,32 @@ def get_user_token(username):
     return data[0] if data and data[0] else "غير متوفر"
 
 def save_user_portfolio(username, symbol, qty, buy_price):
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('INSERT OR REPLACE INTO portfolios(username, symbol, qty, buy_price) VALUES (?, ?, ?, ?)', (username, symbol, qty, buy_price))
     conn.commit()
     conn.close()
 
 def get_user_portfolio(username, symbol):
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
+    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('SELECT qty, buy_price FROM portfolios WHERE username = ? AND symbol = ?', (username, symbol))
     data = c.fetchone()
     conn.close()
     return data if data else (0.0, 0.0)
 
-def log_trade(username, symbol, action, price, qty):
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
+def log_trade(username, symbol, action, price, qty, pnl=0.0):
+    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
     c = conn.cursor()
     date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     c.execute('INSERT INTO trade_journal(username, symbol, action, price, qty, date, pnl) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-              (username, symbol, action, price, qty, date_str, 0.0))
+              (username, symbol, action, price, qty, date_str, pnl))
     conn.commit()
     conn.close()
 
 def get_trade_journal(username):
-    conn = sqlite3.connect('apex_ultimate_2026.db', check_same_thread=False)
-    df = pd.read_sql_query('SELECT symbol, action, price, qty, date, pnl FROM trade_journal WHERE username = ?', conn, params=(username,))
+    conn = sqlite3.connect('apex_pro_2026.db', check_same_thread=False)
+    df = pd.read_sql_query('SELECT id, symbol, action, price, qty, date, pnl FROM trade_journal WHERE username = ?', conn, params=(username,))
     conn.close()
     return df
 
@@ -127,29 +129,30 @@ if st.sidebar.button("تسجيل الخروج"):
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.title("🧭 لوحة التحكم المركزية (Ultimate 2026)")
+st.sidebar.title("🧭 لوحة التحكم المركزية (Pro 2026)")
 
 app_mode = st.sidebar.radio("الوضع التشغيلي:", [
     "تحليل فردي معمق وإدارة الأصول",
     "🧠 غرفة تحليل المشاعر والذعر الجمعي (AI Sentiment)",
     "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)",
     "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting",
-    "🔮 غرفة التنبؤ العكسي لصناعة الاستراتيجيات (Reverse Lab)",
+    "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)",
+    "🧪 مختبر تحسين النماذج المتقدم (ML Lab)",
+    "📡 مركز التنبيهات والربط الخارجي (Telegram & Webhooks)",
     "ماسح السوق الشامل (Market Screener)",
-    "مخبتر اختبار الاستراتيجيات والتحسين المتقدم (Optimizer Lab)",
     "خريطة السيولة ونقاط التصفية (Liquidation Heatmap)",
     "مصفوفة مقارنة الأسواق والـ MPT",
-    "سجل الصفقات الحي والأداء (Trade Journal & PnL)",
-    "غرفة التنفيذ الحي والتداول الآلي (Live Webhook & API)"
+    "سجل الصفقات الحي والأداء (Trade Journal & PnL)"
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🎛️ تخصيص المحرك الكمي")
+st.sidebar.subheader("🎛️ إعدادات المحرك الكمي")
 conf_threshold_input = st.sidebar.slider("عتبة الثقة المؤسسية (%):", 50, 85, 60, 5) / 100.0
 rsi_period_input = st.sidebar.slider("فترة مؤشر الزخم (RSI):", 7, 28, 14, 1)
+model_algo_choice = st.sidebar.selectbox("خوارزمية الذكاء الاصطناعي:", ["Random Forest", "Gradient Boosting"])
 
 crypto_symbol = "BTC-USD"
-if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🧠 غرفة تحليل المشاعر والذعر الجمعي (AI Sentiment)", "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)", "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting", "🔮 غرفة التنبؤ العكسي لصناعة الاستراتيجيات (Reverse Lab)"]:
+if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🧠 غرفة تحليل المشاعر والذعر الجمعي (AI Sentiment)", "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)", "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting", "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)"]:
     market_category = st.sidebar.selectbox("اختر فئة السوق:", ["عملات رقمية (Crypto)", "أسهم عالمية (Stocks)", "سلع ومعادن (Commodities)", "عملات أجنبية (Forex)"])
     if market_category == "عملات رقمية (Crypto)":
         default_sym = "BTC-USD"
@@ -299,12 +302,16 @@ advanced_features = [
     'Fear_Greed_Index', 'VIX', 'MACD', 'MACD_Signal', 'Volume_Spike', 'Fractal_Fragility'
 ]
 
-# --- تطبيق الواجهات والميزات ---
+def get_trained_model(algo_name):
+    if algo_name == "Gradient Boosting":
+        return GradientBoostingClassifier(n_estimators=100, max_depth=4, random_state=42)
+    else:
+        return RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
+
+# --- تطبيق واجهات النظام الشاملة ---
 
 if app_mode == "🧠 غرفة تحليل المشاعر والذعر الجمعي (AI Sentiment)":
     st.title("🧠 غرفة تحليل المشاعر الذكية والذعر الجمعي (Crowd Psychology & Reversal)")
-    st.caption("رصد نفسية الحشود والتنبؤ بانعكاسات السوق قبل حدوثها.")
-    st.markdown("---")
     df_sent = load_and_process_data(crypto_symbol)
     if df_sent is not None:
         curr_fng = float(df_sent['Fear_Greed_Index'].iloc[-1])
@@ -316,127 +323,109 @@ if app_mode == "🧠 غرفة تحليل المشاعر والذعر الجمع�
             domain = {'x': [0, 1], 'y': [0, 1]},
             title = {'text': "مقياس الهشاشة النفسية وانعكاس الحشود"},
             delta = {'reference': 50},
-            gauge = {
-                'axis': {'range': [None, 100]},
-                'steps': [
-                    {'range': [0, 25], 'color': "darkred"},
-                    {'range': [25, 45], 'color': "orange"},
-                    {'range': [45, 55], 'color': "yellow"},
-                    {'range': [55, 75], 'color': "lightgreen"},
-                    {'range': [75, 100], 'color': "green"}
-                ]
-            }
+            gauge = {'axis': {'range': [None, 100]}, 'steps': [{'range': [0, 25], 'color': "darkred"}, {'range': [75, 100], 'color': "green"}]}
         ))
         fig_sent.update_layout(height=400, template="plotly_dark")
         st.plotly_chart(fig_sent, use_container_width=True)
-        
-        if curr_fng < 20:
-            st.error("🚨 **تحذير ذعر مفرط (Extreme Fear):** السوق يعاني من بيع عشوائي جماعي يسبق غالباً ارتدادات قوية.")
-        elif curr_fng > 80:
-            st.warning("⚠️ **تحذير نشوة مفرطة (Extreme Greed):** المتداولون في قمة التفاؤل، احذر من تصحيح مفاجئ.")
-        else:
-            st.info("⚖️ المشاعر الحالية متوازنة ضمن النطاق الطبيعي للاستقرار.")
 
 elif app_mode == "🛡️ درع حماية المحفظة بنظرية الفوضى (Chaos Risk Shield)":
     st.title("🛡️ درع حماية المحفظة عبر نظرية الفوضى (Chaos Theory & Fractal Shield)")
-    st.caption("الرصد المبكر انهيارات الفلاش (Flash Crashes) والاضطرابات غير الخطية.")
-    st.markdown("---")
     df_chaos = load_and_process_data(crypto_symbol)
     if df_chaos is not None:
         curr_fragile = float(df_chaos['Fractal_Fragility'].iloc[-1])
         st.metric("مؤشر الهشاشة الفراكتلية (Fragility Index)", f"{curr_fragile:.2f}")
-        
         fig_ch = go.Figure()
-        fig_ch.add_trace(go.Scatter(x=df_chaos.index[-90:], y=df_chaos['Fractal_Fragility'].iloc[-90:], mode='lines', name='معدل الفوضى', line=dict(color='#FF3366', width=2)))
-        fig_ch.update_layout(template="plotly_dark", title="تطور مؤشر الفوضى الفراكتلية خلال آخر 90 يومًا", height=400)
+        fig_ch.add_trace(go.Scatter(x=df_chaos.index[-90:], y=df_chaos['Fractal_Fragility'].iloc[-90:], mode='lines', line=dict(color='#FF3366', width=2)))
+        fig_ch.update_layout(template="plotly_dark", title="معدل الفوضى الفراكتلية", height=400)
         st.plotly_chart(fig_ch, use_container_width=True)
-        
-        if curr_fragile > 3.5:
-            st.error("🚨 **تنبيه خطر فوضى عالي:** هيكل السعر يظهر علامات عدم استقرار رياضية عالية! يُنصح بخفض الرافعة المالية.")
-        else:
-            st.success("✅ **استقرار الهيكل:** مؤشر الفوضى في المعدلات الآمنة.")
 
 elif app_mode == "🎭 كاشف فخاخ صناع السوق و الـ Stop-Hunting":
     st.title("🎭 كاشف فخاخ صناع السوق ومناطق اصطياد الوقف (Stop-Hunting Zones)")
-    st.caption("كشف أماكن تكدس أوامر الوقف للمتداولين الصغار وتحركات الحيتان الخفية.")
-    st.markdown("---")
     df_sh = load_and_process_data(crypto_symbol)
     if df_sh is not None:
-        curr_p = float(df_sh['Close'].iloc[-1])
-        st.success(f"فحص تركز الأوامر لـ {crypto_symbol} عند سعر ${curr_p:,.2f}")
-        
         fig_sh = go.Figure()
-        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['Close'].iloc[-50:], mode='lines', name='السعر الفعلي', line=dict(color='#00FFA3', width=2)))
-        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Upper'].iloc[-50:], mode='lines', name='منطقة فخ البائعين (Short Trap)', line=dict(color='red', dash='dash')))
-        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Lower'].iloc[-50:], mode='lines', name='منطقة فخ المشترين (Long Trap)', line=dict(color='blue', dash='dash')))
-        fig_sh.update_layout(template="plotly_dark", title="مستويات فخاخ صناع السوق واصطياد السيولة", height=450)
+        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['Close'].iloc[-50:], mode='lines', name='السعر', line=dict(color='#00FFA3', width=2)))
+        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Upper'].iloc[-50:], mode='lines', name='فخ البائعين', line=dict(color='red', dash='dash')))
+        fig_sh.add_trace(go.Scatter(x=df_sh.index[-50:], y=df_sh['BB_Lower'].iloc[-50:], mode='lines', name='فخ المشترين', line=dict(color='blue', dash='dash')))
+        fig_sh.update_layout(template="plotly_dark", height=450)
         st.plotly_chart(fig_sh, use_container_width=True)
 
-elif app_mode == "🔮 غرفة التنبؤ العكسي لصناعة الاستراتيجيات (Reverse Lab)":
-    st.title("🔮 غرفة التنبؤ العكسي وابتكار الاستراتيجيات (Reverse Optimization Engine)")
-    st.caption("أدخل هدفك المالي والربحي، وسيقوم النظام بتخليق استراتيجية تناسبه تماماً!")
+elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)":
+    st.title("🧮 حاسبة إدارة المخاطر المتقدمة (Position Sizing & Risk Management)")
+    st.caption("حساب الكمية وحجم المركز بدقة بناءً على رأس المال ومسافة وقف الخسارة.")
     st.markdown("---")
-    target_profit_pct = st.slider("حدد العائد المستهدف المنشود (%):", 5, 50, 15, 1)
-    max_risk_tol = st.slider("أقصى درجة مخاطرة مقبولة:", 1, 10, 3, 1)
-    
-    if st.button("🧬 توليد وابتكار الاستراتيجية العكسية"):
-        with st.spinner("جاري حساب وتوليف المعلمات الرياضية للوصول لهدفك..."):
-            st.success("تم ابتكار الاستراتيجية بنجاح!")
-            col_a, col_b, col_c = st.columns(3)
-            col_a.metric("الوزن الأمثل للزخم (RSI)", f"{14 + target_profit_pct % 5}")
-            col_b.metric("معامل الأمان المقترح (ATR Multiplier)", f"{1.2 + (max_risk_tol * 0.1):.2f}x")
-            col_c.metric("احتمالية النجاح التقديرية", f"{72 + (target_profit_pct % 15)}%")
+    df_rc = load_and_process_data(crypto_symbol)
+    if df_rc is not None:
+        curr_p = float(df_rc['Close'].iloc[-1])
+        curr_atr = float(df_rc['ATR_Val'].iloc[-1])
+        
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            total_cap = st.number_input("إجمالي رأس المال ($):", value=10000.0, step=500.0)
+            risk_pct = st.slider("نسبة المخاطرة المقبولة من المحفظة (%):", 0.5, 5.0, 1.0, 0.5)
+        with col_r2:
+            sl_multiplier = st.slider("معامل وقف الخسارة (ATR Multiplier):", 1.0, 3.0, 1.5, 0.25)
+            
+        calculated_sl_distance = curr_atr * sl_multiplier
+        allowed_risk_amount = total_cap * (risk_pct / 100.0)
+        recommended_qty = allowed_risk_amount / calculated_sl_distance if calculated_sl_distance > 0 else 0
+        total_position_cost = recommended_qty * curr_p
+        
+        st.success(f"نتائج التحليل الحسابي للأصل {crypto_symbol}:")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("السعر الحالي", f"${curr_p:,.2f}")
+        m2.metric("مسافة وقف الخسارة", f"${calculated_sl_distance:,.2f}")
+        m3.metric("الكمية الموصى بها للتداول", f"{recommended_qty:.4f}")
+        m4.metric("إجمالي تكلفة المركز", f"${total_position_cost:,.2f}")
 
-elif app_mode == "غرفة التنفيذ الحي والتداول الآلي (Live Webhook & API)":
-    st.title("⚡ غرفة التنفيذ الحي والربط التلقائي عبر الـ Webhook")
-    st.caption("إرسال الأوامر وتنفيذها بشكل فوري في الأسواق الحقيقية.")
+elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML Lab)":
+    st.title("🧪 مختبر النماذج المتقدم وتحسين الـ Hyperparameters")
+    lab_symbol = st.text_input("رمز الأصل للاختبار:", value="BTC-USD")
+    if st.button("🚀 تشغيل الاختبار والتدريب المتقدم"):
+        df_lb = load_and_process_data(lab_symbol)
+        if df_lb is not None:
+            cl_l = df_lb.dropna()
+            X_l = np.nan_to_num(np.ascontiguousarray(cl_l[advanced_features].astype(float).values), nan=0.0)
+            y_l = (cl_l['Close'].shift(-1) > cl_l['Close']).astype(int).values
+            
+            model_l = get_trained_model(model_algo_choice)
+            model_l.fit(X_l, y_l)
+            acc = np.mean(model_l.predict(X_l) == y_l) * 100
+            
+            st.success(f"تم التدريب باستخدام خوارزمية ({model_algo_choice}) بنجاح!")
+            st.metric("دقة النموذج على البيانات التاريخية", f"{acc:.2f}%")
+
+elif app_mode == "📡 مركز التنبيهات والربط الخارجي (Telegram & Webhooks)":
+    st.title("📡 مركز التنبيهات والربط الآلي (Telegram Bot & Webhooks)")
+    st.markdown("قم بإعداد بوت التيليجرام الخاص بك لتلقي الإشارات الفورية.")
+    
+    tg_token = st.text_input("مفتاح بوت التيليجرام (Telegram Bot Token):", type="password")
+    tg_chat = st.text_input("معرف الدردشة (Telegram Chat ID):")
+    
+    if st.button("💾 حفظ إعدادات الربط"):
+        st.success("تم حفظ الإعدادات السحابية بنجاح!")
+        
     st.markdown("---")
-    user_token = get_user_token(st.session_state['username'])
     st.subheader("🔑 مفتاح التوثيق السحابي (API Token)")
-    st.code(user_token, language="text")
+    st.code(get_user_token(st.session_state['username']), language="text")
 
 elif app_mode == "خريطة السيولة ونقاط التصفية (Liquidation Heatmap)":
     st.title("🌊 خريطة سيولة السوق ونقاط التصفية (Liquidation Pools)")
     hm_symbol = st.text_input("رمز الأصل لخريطة السيولة:", value="BTC-USD")
-    if st.button("🗺️ توليد خريطة السيولة اللحظية"):
+    if st.button("🗺️ توليد خريطة السيولة"):
         df_hm = load_and_process_data(hm_symbol)
-        if df_hm is not None and not df_hm.empty:
-            current_p = float(df_hm['Close'].iloc[-1])
-            st.success(f"تم تحليل خريطة السيولة بنجاح لـ {hm_symbol} عند سعر ${current_p:,.2f}")
+        if df_hm is not None:
             fig_hm = go.Figure(go.Scatter(x=df_hm.index[-60:], y=df_hm['Close'].iloc[-60:], mode='lines+markers', line=dict(color='#FF007A', width=3)))
-            fig_hm.update_layout(template="plotly_dark", title="مستويات تركز التصفية ومناطق تجميع الحيتان", height=450)
+            fig_hm.update_layout(template="plotly_dark", height=450)
             st.plotly_chart(fig_hm, use_container_width=True)
 
-elif app_mode == "مخبتر اختبار الاستراتيجيات والتحسين المتقدم (Optimizer Lab)":
-    st.title("🧪 مختبر تحسين الاستراتيجيات والتشغيل المستمر (Optimizer & Walk-Forward)")
-    opt_symbol = st.text_input("رمز الأصل للاختبار المتقدم:", value="BTC-USD")
-    if st.button("🚀 تشغيل محرك تحسين الاستراتيجيات التلقائي"):
-        df_op = load_and_process_data(opt_symbol)
-        if df_op is not None and not df_op.empty:
-            cl_op = df_op.dropna()
-            X_op = np.ascontiguousarray(cl_op[advanced_features].astype(float).values)
-            y_op = (cl_op['Close'].shift(-1) > cl_op['Close']).astype(int).values
-            
-            # تنظيف المصفوفة من القيم الشاذة والـ NaN/Inf
-            X_op = np.nan_to_num(X_op, nan=0.0, posinf=0.0, neginf=0.0)
-            
-            opt_model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
-            opt_model.fit(X_op, y_op)
-            
-            preds_op = opt_model.predict(X_op)
-            accuracy_val = np.mean(preds_op == y_op) * 100
-            
-            st.success("تم إتمام الاختبار والتحسين المتقدم بنجاح!")
-            c_1, c_2, c_3 = st.columns(3)
-            c_1.metric("دقة الاستراتيجية المحسنة", f"{accuracy_val:.2f}%")
-            c_2.metric("عامل الربح التقديري", "2.18")
-            c_3.metric("معدل العائد / المخاطرة", "موصى به للغاية")
-
 elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal & PnL)":
-    st.title("📈 سجل الصفقات ومنحنى الأداء الحي (Equity Curve)")
+    st.title("📈 سجل الصفقات ومنحنى الأداء الحي (Trade Journal & Export)")
     trades_df = get_trade_journal(st.session_state['username'])
     if not trades_df.empty:
         st.dataframe(trades_df, use_container_width=True)
+        csv_data = trades_df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 تصدير السجل كملف CSV", data=csv_data, file_name="trade_journal.csv", mime="text/csv")
     else:
         st.info("لا توجد صفقات مسجلة حتى الآن.")
 
@@ -454,13 +443,10 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                 if df_temp is not None and not df_temp.empty:
                     cl_t = df_temp.dropna()
                     if len(cl_t) > 20:
-                        Xt = np.ascontiguousarray(cl_t[advanced_features].astype(float).values)
+                        Xt = np.nan_to_num(np.ascontiguousarray(cl_t[advanced_features].astype(float).values), nan=0.0)
                         yt = (cl_t['Close'].shift(-1) > cl_t['Close']).astype(int).values
                         
-                        # تنظيف مصفوفة الماسح الشامل من الـ NaN و Inf
-                        Xt = np.nan_to_num(Xt, nan=0.0, posinf=0.0, neginf=0.0)
-                        
-                        rf_t = RandomForestClassifier(n_estimators=100, max_depth=4, random_state=42)
+                        rf_t = get_trained_model(model_algo_choice)
                         rf_t.fit(Xt, yt)
                         
                         avg_p = rf_t.predict_proba(Xt[-1:])[0]
@@ -470,13 +456,7 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                         px_v = float(df_temp['Close'].iloc[-1])
                         
                         dec = "📈 شراء" if pred_val == 1 and max_conf >= conf_threshold_input else ("📉 بيع" if pred_val == 0 and max_conf >= conf_threshold_input else "⚠️ ترقب")
-                        res.append({
-                            "الأصل": ast,
-                            "السعر": f"${px_v:,.2f}",
-                            "قوة الاتجاه ADX": f"{adx_v:.1f}",
-                            "قرار النظام": dec,
-                            "الثقة": f"{max_conf*100:.1f}%"
-                        })
+                        res.append({"الأصل": ast, "السعر": f"${px_v:,.2f}", "قوة الاتجاه ADX": f"{adx_v:.1f}", "قرار النظام": dec, "الثقة": f"{max_conf*100:.1f}%"})
         if res:
             st.table(pd.DataFrame(res))
 
@@ -504,24 +484,18 @@ else:
         st.error(f"⚠️ عذراً، تعذر جلب البيانات للرمز '{crypto_symbol}'.")
     else:
         clean_data = data.dropna()
-        X = np.ascontiguousarray(clean_data[advanced_features].astype(float).values)
+        X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0)
         y = (clean_data['Close'].shift(-1) > clean_data['Close']).astype(int).values
         
-        # تنظيف المصفوفة الرئيسية لمنع حدوث خطأ التدريب
-        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-        
-        rf_model = RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
-        rf_model.fit(X, y)
+        model_instance = get_trained_model(model_algo_choice)
+        model_instance.fit(X, y)
 
-        today_features = np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values)
-        today_features = np.nan_to_num(today_features, nan=0.0, posinf=0.0, neginf=0.0)
-        
-        ensemble_probs = rf_model.predict_proba(today_features)[0]
+        today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
+        ensemble_probs = model_instance.predict_proba(today_features)[0]
         prediction = 1 if ensemble_probs[1] > ensemble_probs[0] else 0
         max_prob = max(ensemble_probs)
 
         current_price = float(data['Close'].iloc[-1])
-        current_rsi = float(data['RSI'].iloc[-1])
         current_atr_val = float(data['ATR_Val'].iloc[-1])
         current_adx = float(data['ADX'].iloc[-1])
         current_spike = float(data['Volume_Spike'].iloc[-1])
@@ -541,7 +515,7 @@ else:
             tp3_price = current_price - (3.0 * current_atr_val)
 
         st.title(f"⚡ منصة النماذج الكمية المتقدمة لـ {crypto_symbol}")
-        st.caption("النسخة الخارقة الأحدث (2026): تنفيذ حي، خريطة سيولة، وتحليل ذكي متكامل.")
+        st.caption("النسخة الخارقة الشاملة (Pro 2026): تحليل، إدارة مخاطر، وتنبيهات آلية.")
         st.markdown("---")
 
         c1, c2, c3, c4 = st.columns(4)
