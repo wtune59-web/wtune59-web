@@ -88,6 +88,24 @@ def get_trade_journal(username):
     with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
         return pd.read_sql_query('SELECT id, symbol, action, price, qty, date, pnl FROM trade_journal WHERE username = ?', conn, params=(username,))
 
+# --- دالة جلب قائمة أعلى العملات الرقمية ديناميكياً ---
+@st.cache_data(ttl=86400)
+def fetch_top_crypto_symbols(limit=100):
+    try:
+        url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page={limit}&page=1"
+        res = requests.get(url, timeout=5).json()
+        symbols = [f"{item['symbol'].upper()}-USD" for item in res]
+        return symbols
+    except:
+        # قائمة احتياطية موسعة جداً في حال عدم توفر الـ API
+        return [
+            "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", 
+            "AVAX-USD", "SHIB-USD", "DOT-USD", "LINK-USD", "SUI-USD", "NEAR-USD", "LTC-USD", 
+            "PEPE-USD", "FET-USD", "RENDER-USD", "TAO-USD", "APT-USD", "ICP-USD", "KAS-USD", 
+            "INJ-USD", "XMR-USD", "TRX-USD", "ETC-USD", "BCH-USD", "FIL-USD", "ATOM-USD",
+            "ARB-USD", "OP-USD", "MATIC-USD", "STX-USD", "LDO-USD", "TIA-USD", "RUNE-USD"
+        ]
+
 # --- نظام تسجيل الدخول والشريط الجانبي ---
 st.sidebar.title("🔐 بوابة المؤسسات السحابية (Titan Inst)")
 if 'logged_in' not in st.session_state:
@@ -149,12 +167,20 @@ if LSTM_AVAILABLE:
     algo_options.append("Deep Learning (LSTM)")
 model_algo_choice = st.sidebar.selectbox("خوارزمية الذكاء الاصطناعي:", algo_options)
 
+# جلب قائمة العملات الشاملة المتاحة
+all_available_cryptos = fetch_top_crypto_symbols(limit=100)
+
 crypto_symbol = "BTC-USD"
 if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🤖 المساعد الذكي للتحليل المدمج (Quant AI Assistant)", "🛡️ درع حماية المحفظة وحساب القيمة المعرضة للمخاطر (VaR)", "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)"]:
-    market_category = st.sidebar.selectbox("اختر فئة السوق:", ["عملات الذكاء الاصطناعي (AI Crypto)", "عملات رقمية عامة (Crypto)", "أسهم عالمية (Stocks)"])
-    default_sym = "RENDER-USD" if market_category == "عملات الذكاء الاصطناعي (AI Crypto)" else ("BTC-USD" if market_category == "عملات رقمية عامة (Crypto)" else "AAPL")
-    user_symbol_input = st.sidebar.text_input("أو أدخل الرمز المباشر (Yahoo Ticker):", value=default_sym)
-    crypto_symbol = user_symbol_input.strip().upper()
+    selected_crypto = st.sidebar.selectbox("اختر من قائمة أعلي العملات الرقمية:", all_available_cryptos)
+    custom_symbol_input = st.sidebar.text_input("أو اكتب رمز أي عملة رقمية/أصل آخر مباشرة (مثال: FLOKI-USD أو AAPL):", value="")
+    
+    if custom_symbol_input.strip():
+        crypto_symbol = custom_symbol_input.strip().upper()
+        if not crypto_symbol.endswith("-USD") and not crypto_symbol.isalpha():
+            pass
+    else:
+        crypto_symbol = selected_crypto
 
 # --- دوال جلب البيانات والمعالجة المحسنة ---
 @st.cache_data(ttl=3600)
@@ -181,7 +207,6 @@ def get_vix_data():
     except:
         return None
 
-# جلب اتجاه الإطار الأسبوعي لمنع تضارب الاتجاه
 @st.cache_data(ttl=3600)
 def get_weekly_trend(symbol):
     try:
@@ -249,7 +274,6 @@ def load_and_process_data(symbol, rsi_window=14):
         dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
         data['ADX'] = dx.rolling(14).mean().fillna(20)
         
-        # تحسين: حاسبة التصفية بدون تسريب بيانات تاريخية (Rolling Windows)
         data['Estimated_Liquidations'] = (data['Volume'] * np.abs(data['Price_Change']) * data['VIX']).rolling(5).mean()
         liq_min = data['Estimated_Liquidations'].rolling(30).min()
         liq_max = data['Estimated_Liquidations'].rolling(30).max()
@@ -306,7 +330,7 @@ if app_mode == "🤖 المساعد الذكي للتحليل المدمج (Quan
 
 elif app_mode == "🧪 محرك الاختبار الخلفي المؤسسي (Institutional Backtesting)":
     st.title("🧪 محرك الاختبار الخلفي المؤسسي (مع العمولات والانزلاق السعري)")
-    bt_symbol = st.text_input("رمز الأصل للاختبار:", value="RENDER-USD")
+    bt_symbol = st.selectbox("اختر رمز العملة للاختبار:", all_available_cryptos)
     col_b1, col_b2 = st.columns(2)
     trading_fee = col_b1.number_input("عمولة المنصة (%):", value=0.1) / 100.0
     slippage = col_b2.number_input("الانزلاق السعري (%):", value=0.05) / 100.0
@@ -364,7 +388,7 @@ elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المرك�
 
 elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML & Deep Learning Lab)":
     st.title("🧪 مختبر النماذج المتقدم والتعلم العميق")
-    lab_symbol = st.text_input("رمز الأصل للاختبار:", value="RENDER-USD")
+    lab_symbol = st.selectbox("اختر رمز العملة لتدريب الموديل:", all_available_cryptos)
     if st.button("🚀 تدريب وتحديث النماذج"):
         df_lb = load_and_process_data(lab_symbol)
         if df_lb is not None and not df_lb.empty:
@@ -379,7 +403,6 @@ elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML &
                 st.success(f"تم التدريب بـ ({model_algo_choice})!")
                 st.metric("دقة النموذج", f"{acc:.2f}%")
             elif LSTM_AVAILABLE:
-                # تحسين: تحجيم البيانات لرفع دقة شبكة LSTM
                 scaler = MinMaxScaler()
                 X_scaled = scaler.fit_transform(X_l)
                 X_lstm = X_scaled.reshape((X_scaled.shape[0], 1, X_scaled.shape[1]))
@@ -395,6 +418,37 @@ elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML &
                 st.success("تم تدريب نموذج LSTM بنجاح!")
                 st.metric("دقة LSTM (المقيسة)", f"{np.mean(preds == y_l)*100:.2f}%")
 
+elif app_mode == "ماسح السوق الشامل (Market Screener)":
+    st.title("🗺️ الماسح المؤسسي الشامل لأسواق المال")
+    s_input = st.text_input("قائمة العملات المراد مسحها (مفصولة بفواصل):", value=", ".join(all_available_cryptos[:15]))
+    assets_l = [x.strip().upper() for x in s_input.split(',')]
+    
+    if st.button("🚀 تشغيل الماسح"):
+        res = []
+        with st.spinner("جاري المسح اللحظي لجميع العملات المطلوبة..."):
+            for ast in assets_l:
+                df_temp = load_and_process_data(ast, rsi_window=rsi_period_input)
+                if df_temp is not None and not df_temp.empty:
+                    cl_t = df_temp.dropna()
+                    if len(cl_t) > 20:
+                        Xt = np.nan_to_num(np.ascontiguousarray(cl_t[advanced_features].astype(float).values), nan=0.0)
+                        yt = cl_t['Target'].astype(int).values
+                        
+                        rf_t = get_trained_model(model_algo_choice if model_algo_choice != "Deep Learning (LSTM)" else "Random Forest")
+                        rf_t.fit(Xt, yt)
+                        avg_p = rf_t.predict_proba(Xt[-1:])[0]
+                        pred_val = 1 if avg_p[1] > avg_p[0] else 0
+                        max_conf = max(avg_p)
+                            
+                        adx_v = float(df_temp['ADX'].iloc[-1])
+                        px_v = float(df_temp['Close'].iloc[-1])
+                        dec = "📈 شراء" if pred_val == 1 and max_conf >= conf_threshold_input else ("📉 بيع" if pred_val == 0 and max_conf >= conf_threshold_input else "⚠️ ترقب")
+                        res.append({"الأصل": ast, "السعر الحالي": f"${px_v:,.2f}", "ADX": f"{adx_v:.1f}", "القرار": dec, "الثقة": f"{max_conf*100:.1f}%"})
+        if res:
+            st.table(pd.DataFrame(res))
+        else:
+            st.warning("تعذر العثور على بيانات كافية للعملات المدخلة.")
+
 elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal & PnL)":
     st.title("📈 سجل الصفقات الحية والأداء")
     trades_df = get_trade_journal(st.session_state['username'])
@@ -406,7 +460,7 @@ else:
         data = load_and_process_data(crypto_symbol, rsi_window=rsi_period_input)
 
     if data is None or data.empty:
-        st.error(f"⚠️ تعذر جلب البيانات للرمز '{crypto_symbol}'.")
+        st.error(f"⚠️ تعذر جلب البيانات للرمز '{crypto_symbol}'. تأكد من كُتّابة الرمز بشكل صحيح (مثال: BTC-USD).")
     else:
         clean_data = data.dropna()
         X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0)
@@ -433,10 +487,9 @@ else:
             prediction = 1 if ensemble_probs[1] > ensemble_probs[0] else 0
             max_prob = max(ensemble_probs)
 
-        # تحسين: فلترة الاتجاه بالأسبوع
         weekly_trend = get_weekly_trend(crypto_symbol)
         if prediction == 1 and weekly_trend == 0:
-            max_prob *= 0.85 # تخفيض الثقة إذا كان شراء ضد الاتجاه العام الأسبوعي
+            max_prob *= 0.85
 
         current_price = float(data['Close'].iloc[-1])
         current_atr_val = float(data['ATR_Val'].iloc[-1])
