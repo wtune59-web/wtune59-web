@@ -325,16 +325,24 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
                 X = np.nan_to_num(np.ascontiguousarray(clean_df[advanced_features].astype(float).values), nan=0.0)
                 y = clean_df['Target'].astype(int).values
                 
-                model_inst = get_trained_model(model_algo_choice)
-                if model_inst is not None:
-                    model_inst.fit(X, y)
-                    feat = np.nan_to_num(np.ascontiguousarray(df_temp[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
-                    probs = model_inst.predict_proba(feat)[0]
-                    decision = "🟢 شـراء" if probs[1] >= 0.50 else "🔴 بيـع"
-                    confidence = max(probs) * 100
+                # حماية لمنع الخطأ عند تدريب النموذج بكتلة واحدة من البيانات
+                if len(np.unique(y)) > 1:
+                    model_inst = get_trained_model(model_algo_choice)
+                    if model_inst is not None:
+                        model_inst.fit(X, y)
+                        feat = np.nan_to_num(np.ascontiguousarray(df_temp[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
+                        probs = model_inst.predict_proba(feat)[0]
+                        
+                        # التأكد المباشر من مصفوفة الاحتمالات لتفادي الـ IndexError
+                        prob_buy = probs[1] if len(probs) > 1 else (1.0 if model_inst.classes_[0] == 1 else 0.0)
+                        decision = "🟢 شـراء" if prob_buy >= 0.50 else "🔴 بيـع"
+                        confidence = (prob_buy if prob_buy >= 0.50 else (1 - prob_buy)) * 100
+                    else:
+                        decision = "🟢 شـراء"
+                        confidence = 50.0
                 else:
-                    decision = "🟢 شـراء"
-                    confidence = 50.0
+                    decision = "🟢 شـراء" if y[0] == 1 else "🔴 بيـع"
+                    confidence = 100.0
 
                 px_v = float(df_temp['Close'].iloc[-1])
                 rsi_v = float(df_temp['RSI'].iloc[-1])
@@ -368,16 +376,19 @@ else:
         X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0)
         y = clean_data['Target'].astype(int).values
         
-        model_instance = get_trained_model(model_algo_choice)
-        
-        if model_instance is not None:
-            model_instance.fit(X, y)
-            today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
-            ensemble_probs = model_instance.predict_proba(today_features)[0]
-            prob_buy = ensemble_probs[1]
-            prob_sell = ensemble_probs[0]
+        if len(np.unique(y)) > 1:
+            model_instance = get_trained_model(model_algo_choice)
+            if model_instance is not None:
+                model_instance.fit(X, y)
+                today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
+                ensemble_probs = model_instance.predict_proba(today_features)[0]
+                prob_buy = ensemble_probs[1] if len(ensemble_probs) > 1 else (1.0 if model_instance.classes_[0] == 1 else 0.0)
+                prob_sell = 1.0 - prob_buy
+            else:
+                prob_buy, prob_sell = 0.50, 0.50
         else:
-            prob_buy, prob_sell = 0.50, 0.50
+            prob_buy = 1.0 if y[0] == 1 else 0.0
+            prob_sell = 1.0 - prob_buy
 
         current_price = float(data['Close'].iloc[-1])
         st.title(f"⚡ التحليل والتنبؤ النهائي لـ {crypto_symbol}")
@@ -385,7 +396,6 @@ else:
         c1, c2 = st.columns(2)
         c1.metric("السعر اللحظي", f"${current_price:,.4f}" if current_price < 1 else f"${current_price:,.2f}")
         
-        # التعديل ليكون شراء أو بيع فقط وببساطة
         if prob_buy >= 0.50:
             dec_str = "🟢 شـراء (BUY)"
             conf_val = prob_buy * 100
