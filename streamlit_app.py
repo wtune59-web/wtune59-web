@@ -260,12 +260,20 @@ def load_and_process_data(symbol, rsi_window=14):
         data['ADX'] = dx.rolling(14).mean().fillna(20)
         
         data['Target'] = (data['Close'].shift(-1) > data['Close']).astype(int)
+
+        # استبدال القيم غير المنتهية (inf) والتأكد من تنظيفها تماماً
+        data = data.replace([np.inf, -np.inf], np.nan)
         data = data.bfill().ffill().fillna(0)
         return data
     except Exception:
         return None
 
 advanced_features = ['Price_Change', 'Volume_Change', 'Lag_1', 'Lag_2', 'SMA_Ratio', 'RSI', 'ATR', 'ADX', 'Fear_Greed_Index', 'VIX']
+
+def clean_feature_array(df, features):
+    # دالة مخصصة لضمان تنظيف الأرقام من أي nan أو inf تماماً
+    arr = df[features].astype(float).replace([np.inf, -np.inf], np.nan).fillna(0.0).values
+    return np.nan_to_num(np.ascontiguousarray(arr), nan=0.0, posinf=0.0, neginf=0.0)
 
 def get_trained_model(algo_name):
     if algo_name == "Gradient Boosting":
@@ -322,18 +330,16 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
             df_temp = load_and_process_data(ast)
             if df_temp is not None and not df_temp.empty:
                 clean_df = df_temp.dropna()
-                X = np.nan_to_num(np.ascontiguousarray(clean_df[advanced_features].astype(float).values), nan=0.0)
+                X = clean_feature_array(clean_df, advanced_features)
                 y = clean_df['Target'].astype(int).values
                 
-                # حماية لمنع الخطأ عند تدريب النموذج بكتلة واحدة من البيانات
                 if len(np.unique(y)) > 1:
                     model_inst = get_trained_model(model_algo_choice)
                     if model_inst is not None:
                         model_inst.fit(X, y)
-                        feat = np.nan_to_num(np.ascontiguousarray(df_temp[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
+                        feat = clean_feature_array(df_temp.iloc[-1:], advanced_features)
                         probs = model_inst.predict_proba(feat)[0]
                         
-                        # التأكد المباشر من مصفوفة الاحتمالات لتفادي الـ IndexError
                         prob_buy = probs[1] if len(probs) > 1 else (1.0 if model_inst.classes_[0] == 1 else 0.0)
                         decision = "🟢 شـراء" if prob_buy >= 0.50 else "🔴 بيـع"
                         confidence = (prob_buy if prob_buy >= 0.50 else (1 - prob_buy)) * 100
@@ -373,14 +379,14 @@ else:
         st.error(f"⚠️ لم يتم العثور على بيانات للرمز '{crypto_symbol}'. تأكد من الرمز (مثل: FLOKI أو BONK).")
     else:
         clean_data = data.dropna()
-        X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0)
+        X = clean_feature_array(clean_data, advanced_features)
         y = clean_data['Target'].astype(int).values
         
         if len(np.unique(y)) > 1:
             model_instance = get_trained_model(model_algo_choice)
             if model_instance is not None:
                 model_instance.fit(X, y)
-                today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
+                today_features = clean_feature_array(data.iloc[-1:], advanced_features)
                 ensemble_probs = model_instance.predict_proba(today_features)[0]
                 prob_buy = ensemble_probs[1] if len(ensemble_probs) > 1 else (1.0 if model_instance.classes_[0] == 1 else 0.0)
                 prob_sell = 1.0 - prob_buy
