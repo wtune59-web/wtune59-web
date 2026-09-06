@@ -35,7 +35,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- إعداد قاعدة البيانات الشاملة والموسعة آمنة الاتصال ---
+# --- إعداد قاعدة البيانات الشاملة ---
 DB_NAME = 'apex_titan_2026_inst.db'
 
 def init_db():
@@ -88,23 +88,37 @@ def get_trade_journal(username):
     with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
         return pd.read_sql_query('SELECT id, symbol, action, price, qty, date, pnl FROM trade_journal WHERE username = ?', conn, params=(username,))
 
-# --- دالة جلب قائمة أعلى العملات الرقمية ديناميكياً ---
-@st.cache_data(ttl=86400)
-def fetch_top_crypto_symbols(limit=100):
+# --- دالة جلب قائمة أعلى العملات الرقمية ديناميكياً مع رفع الحد إلى 250 عملة ---
+@st.cache_data(ttl=43200)
+def fetch_top_crypto_symbols(limit=250):
+    symbols = []
     try:
-        url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page={limit}&page=1"
-        res = requests.get(url, timeout=5).json()
-        symbols = [f"{item['symbol'].upper()}-USD" for item in res]
-        return symbols
-    except:
-        # قائمة احتياطية موسعة جداً في حال عدم توفر الـ API
-        return [
-            "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", 
-            "AVAX-USD", "SHIB-USD", "DOT-USD", "LINK-USD", "SUI-USD", "NEAR-USD", "LTC-USD", 
-            "PEPE-USD", "FET-USD", "RENDER-USD", "TAO-USD", "APT-USD", "ICP-USD", "KAS-USD", 
-            "INJ-USD", "XMR-USD", "TRX-USD", "ETC-USD", "BCH-USD", "FIL-USD", "ATOM-USD",
-            "ARB-USD", "OP-USD", "MATIC-USD", "STX-USD", "LDO-USD", "TIA-USD", "RUNE-USD"
-        ]
+        # جلب الصفحات للحصول على أكبر عدد من العملات المتاحة
+        pages = (limit // 100) + (1 if limit % 100 != 0 else 0)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        for page in range(1, pages + 1):
+            url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page={page}"
+            res = requests.get(url, headers=headers, timeout=5).json()
+            if isinstance(res, list):
+                for item in res:
+                    symbols.append(f"{item['symbol'].upper()}-USD")
+            if len(symbols) >= limit:
+                break
+    except Exception:
+        pass
+    
+    # دمج قائمة احتياطية موسعة جداً لضمان عدم الخلو
+    fallback_list = [
+        "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", 
+        "AVAX-USD", "SHIB-USD", "DOT-USD", "LINK-USD", "SUI-USD", "NEAR-USD", "LTC-USD", 
+        "PEPE-USD", "FET-USD", "RENDER-USD", "TAO-USD", "APT-USD", "ICP-USD", "KAS-USD", 
+        "INJ-USD", "XMR-USD", "TRX-USD", "ETC-USD", "BCH-USD", "FIL-USD", "ATOM-USD",
+        "ARB-USD", "OP-USD", "MATIC-USD", "STX-USD", "LDO-USD", "TIA-USD", "RUNE-USD",
+        "BONK-USD", "FLOKI-USD", "WIF-USD", "SEI-USD", "AAVE-USD", "MKR-USD", "UNI-USD"
+    ]
+    
+    combined = list(dict.fromkeys(symbols + fallback_list))
+    return combined[:limit]
 
 # --- نظام تسجيل الدخول والشريط الجانبي ---
 st.sidebar.title("🔐 بوابة المؤسسات السحابية (Titan Inst)")
@@ -128,12 +142,12 @@ if not st.session_state['logged_in']:
     else:
         if st.sidebar.button("تسجيل الحساب"):
             if add_user(u_input, p_input):
-                st.sidebar.success("تم إنشاء الحساب وتفعيله كمتداول رئيسي!")
+                st.sidebar.success("تم إنشاء الحساب وتفعيله!")
             else:
                 st.sidebar.error("اسم المستخدم مستخدم مسبقاً.")
     st.stop()
 
-st.sidebar.success(f"مرحباً بك، المؤسس {st.session_state['username']} ⚡")
+st.sidebar.success(f"مرحباً بك، {st.session_state['username']} ⚡")
 if st.sidebar.button("تسجيل الخروج"):
     st.session_state['logged_in'] = False
     st.session_state['username'] = ""
@@ -151,7 +165,6 @@ app_mode = st.sidebar.radio("الوضع التشغيلي:", [
     "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)",
     "🧪 مختبر تحسين النماذج المتقدم (ML & Deep Learning Lab)",
     "ماسح السوق الشامل (Market Screener)",
-    "خريطة السيولة ونقاط التصفية (Liquidation Heatmap)",
     "سجل الصفقات الحي والأداء (Trade Journal & PnL)"
 ])
 
@@ -167,18 +180,17 @@ if LSTM_AVAILABLE:
     algo_options.append("Deep Learning (LSTM)")
 model_algo_choice = st.sidebar.selectbox("خوارزمية الذكاء الاصطناعي:", algo_options)
 
-# جلب قائمة العملات الشاملة المتاحة
-all_available_cryptos = fetch_top_crypto_symbols(limit=100)
+# جلب قائمة 250 عملة مع إتاحة البحث الحر لأي عملة في العالم
+all_available_cryptos = fetch_top_crypto_symbols(limit=250)
 
 crypto_symbol = "BTC-USD"
 if app_mode in ["تحليل فردي معمق وإدارة الأصول", "🤖 المساعد الذكي للتحليل المدمج (Quant AI Assistant)", "🛡️ درع حماية المحفظة وحساب القيمة المعرضة للمخاطر (VaR)", "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)"]:
-    selected_crypto = st.sidebar.selectbox("اختر من قائمة أعلي العملات الرقمية:", all_available_cryptos)
-    custom_symbol_input = st.sidebar.text_input("أو اكتب رمز أي عملة رقمية/أصل آخر مباشرة (مثال: FLOKI-USD أو AAPL):", value="")
+    selected_crypto = st.sidebar.selectbox(f"اختر من العملات المتاحة ({len(all_available_cryptos)} عملة):", all_available_cryptos)
+    custom_symbol_input = st.sidebar.text_input("أو ابحث/اكتب رمز أي عملة عالمية مباشرة (مثال: FLOKI أو BONK):", value="")
     
     if custom_symbol_input.strip():
-        crypto_symbol = custom_symbol_input.strip().upper()
-        if not crypto_symbol.endswith("-USD") and not crypto_symbol.isalpha():
-            pass
+        user_raw = custom_symbol_input.strip().upper()
+        crypto_symbol = user_raw if user_raw.endswith("-USD") else f"{user_raw}-USD"
     else:
         crypto_symbol = selected_crypto
 
@@ -274,37 +286,13 @@ def load_and_process_data(symbol, rsi_window=14):
         dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)
         data['ADX'] = dx.rolling(14).mean().fillna(20)
         
-        data['Estimated_Liquidations'] = (data['Volume'] * np.abs(data['Price_Change']) * data['VIX']).rolling(5).mean()
-        liq_min = data['Estimated_Liquidations'].rolling(30).min()
-        liq_max = data['Estimated_Liquidations'].rolling(30).max()
-        data['Liquidation_Index'] = 100 * (data['Estimated_Liquidations'] - liq_min) / (liq_max - liq_min + 1e-9)
-        data['Liquidation_Index'] = data['Liquidation_Index'].fillna(50)
-        
-        low_14 = data['Low'].rolling(14).min()
-        high_14 = data['High'].rolling(14).max()
-        data['Stochastic_K'] = 100 * (data['Close'] - low_14) / (high_14 - low_14 + 1e-9)
-        
-        exp1 = data['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = data['Close'].ewm(span=26, adjust=False).mean()
-        data['MACD'] = exp1 - exp2
-        data['MACD_Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
-        
-        vol_mean = data['Volume'].rolling(30).mean()
-        data['Volume_Spike'] = data['Volume'] / (vol_mean + 1e-9)
-        data['Fractal_Fragility'] = (data['Close'].rolling(5).std() / (data['Close'].rolling(30).std() + 1e-9)) * data['VIX']
-        
         data['Target'] = (data['Close'].shift(-1) > data['Close']).astype(int)
         data = data.bfill().ffill().fillna(0)
         return data
-    except Exception as e:
-        print(f"Error loading {symbol}: {e}")
+    except Exception:
         return None
 
-advanced_features = [
-    'Price_Change', 'Volume_Change', 'Lag_1', 'Lag_2',
-    'SMA_Ratio', 'RSI', 'ATR', 'ADX', 'Liquidation_Index', 'Stochastic_K', 
-    'Fear_Greed_Index', 'VIX', 'MACD', 'MACD_Signal', 'Volume_Spike', 'Fractal_Fragility'
-]
+advanced_features = ['Price_Change', 'Volume_Change', 'Lag_1', 'Lag_2', 'SMA_Ratio', 'RSI', 'ATR', 'ADX', 'Fear_Greed_Index', 'VIX']
 
 def get_trained_model(algo_name):
     if algo_name == "Gradient Boosting":
@@ -316,203 +304,81 @@ def get_trained_model(algo_name):
     else:
         return RandomForestClassifier(n_estimators=200, max_depth=5, random_state=42)
 
-# --- الواجهات والتطبيقات ---
+# --- واجهات المنصة ---
 if app_mode == "🤖 المساعد الذكي للتحليل المدمج (Quant AI Assistant)":
-    st.title("🤖 المساعد الذكي للتحليل المدمج (GenAI Quant Expert)")
+    st.title("🤖 المساعد الذكي للتحليل المدمج")
     user_q = st.text_input("أدخل سؤالك المالي:")
     if st.button("💬 إرسال للمساعد الذكي"):
         df_q = load_and_process_data(crypto_symbol)
         if df_q is not None and not df_q.empty:
-            cur_p, cur_rsi, cur_adx = float(df_q['Close'].iloc[-1]), float(df_q['RSI'].iloc[-1]), float(df_q['ADX'].iloc[-1])
-            st.info(f"تحليلاً لطلبك بخصوص ({crypto_symbol}):\n- السعر: ${cur_p:,.2f}\n- RSI: {cur_rsi:.1f}\n- قوة الاتجاه ADX: {cur_adx:.1f}\nالوضع مستقر ومتاح للتنفيذ.")
+            cur_p, cur_rsi = float(df_q['Close'].iloc[-1]), float(df_q['RSI'].iloc[-1])
+            st.info(f"التحليل الخاص بـ ({crypto_symbol}):\n- السعر: ${cur_p:,.2f}\n- RSI: {cur_rsi:.1f}")
         else:
-            st.error(f"تعذر جلب بيانات الرمز '{crypto_symbol}'.")
+            st.error(f"تعذر جلب البيانات للرمز '{crypto_symbol}'.")
 
 elif app_mode == "🧪 محرك الاختبار الخلفي المؤسسي (Institutional Backtesting)":
-    st.title("🧪 محرك الاختبار الخلفي المؤسسي (مع العمولات والانزلاق السعري)")
-    bt_symbol = st.selectbox("اختر رمز العملة للاختبار:", all_available_cryptos)
-    col_b1, col_b2 = st.columns(2)
-    trading_fee = col_b1.number_input("عمولة المنصة (%):", value=0.1) / 100.0
-    slippage = col_b2.number_input("الانزلاق السعري (%):", value=0.05) / 100.0
-        
+    st.title("🧪 محرك الاختبار الخلفي")
+    bt_symbol = st.selectbox("اختر العملة للاختبار:", all_available_cryptos)
     if st.button("🚀 تشغيل محاكاة الاختبار"):
         df_bt = load_and_process_data(bt_symbol)
         if df_bt is not None and not df_bt.empty:
             df_bt['Signal'] = np.where(df_bt['RSI'] < 40, 1, np.where(df_bt['RSI'] > 70, -1, 0))
-            costs = df_bt['Signal'].diff().abs().fillna(0) * (trading_fee + slippage)
-            df_bt['Strategy_Returns'] = (df_bt['Signal'].shift(1) * df_bt['Price_Change']) - costs
+            df_bt['Strategy_Returns'] = (df_bt['Signal'].shift(1) * df_bt['Price_Change'])
             cum_returns = (1 + df_bt['Strategy_Returns'].fillna(0)).cumprod() - 1
-            
-            sharpe = (df_bt['Strategy_Returns'].mean() / (df_bt['Strategy_Returns'].std() + 1e-9)) * np.sqrt(252)
-            st.success("تم التقييم بنجاح!")
-            m1, m2 = st.columns(2)
-            m1.metric("العائد الإجمالي", f"{cum_returns.iloc[-1]*100:.2f}%")
-            m2.metric("معدل شارب (Sharpe Ratio)", f"{sharpe:.2f}")
-            
-            fig_bt = go.Figure(go.Scatter(x=df_bt.index, y=cum_returns, mode='lines', name='العائد', line=dict(color='#00FFA3')))
-            fig_bt.update_layout(template="plotly_dark", height=400, title="منحنى العائد الصافي")
-            st.plotly_chart(fig_bt, use_container_width=True)
-
-elif app_mode == "👥 شبكة التداول الاجتماعي ونسخ الصفقات (Copy Trading)":
-    st.title("👥 شبكة التداول الاجتماعي ونسخ الصفقات")
-    post_content = st.text_area("أشرك المجتمع بصفقاتك:")
-    if st.button("📢 نشر"):
-        if post_content.strip():
-            date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
-                conn.cursor().execute('INSERT INTO social_posts(username, content, date) VALUES (?, ?, ?)', (st.session_state['username'], post_content, date_str))
-                conn.commit()
-            st.success("تم النشر!")
-
-elif app_mode == "🛡️ درع حماية المحفظة وحساب القيمة المعرضة للمخاطر (VaR)":
-    st.title("🛡️ القيمة المعرضة للمخاطر (VaR)")
-    df_var = load_and_process_data(crypto_symbol)
-    if df_var is not None and not df_var.empty:
-        portfolio_val = st.number_input("قيمة المحفظة ($):", value=50000.0)
-        var_95 = np.percentile(df_var['Price_Change'].dropna(), 5) * portfolio_val
-        st.metric("أقصى خسارة متوقعة خلال يوم (95% Confidence)", f"${abs(var_95):,.2f}")
-
-elif app_mode == "🧮 حاسبة إدارة المخاطر وحجم المركز (Risk Calculator)":
-    st.title("🧮 حاسبة إدارة المخاطر وحجم المركز")
-    df_rc = load_and_process_data(crypto_symbol)
-    if df_rc is not None and not df_rc.empty:
-        curr_p, curr_atr = float(df_rc['Close'].iloc[-1]), float(df_rc['ATR_Val'].iloc[-1])
-        total_cap = st.number_input("إجمالي رأس المال ($):", value=10000.0)
-        risk_pct = st.slider("نسبة المخاطرة (%):", 0.5, 5.0, 1.0)
-        sl_multiplier = st.slider("معامل وقف الخسارة (ATR):", 1.0, 3.0, 1.5)
-        
-        sl_dist = curr_atr * sl_multiplier
-        qty = (total_cap * (risk_pct / 100.0)) / sl_dist if sl_dist > 0 else 0
-        
-        st.metric("الكمية الآمنة الموصى بها", f"{qty:.4f}")
-
-elif app_mode == "🧪 مختبر تحسين النماذج المتقدم (ML & Deep Learning Lab)":
-    st.title("🧪 مختبر النماذج المتقدم والتعلم العميق")
-    lab_symbol = st.selectbox("اختر رمز العملة لتدريب الموديل:", all_available_cryptos)
-    if st.button("🚀 تدريب وتحديث النماذج"):
-        df_lb = load_and_process_data(lab_symbol)
-        if df_lb is not None and not df_lb.empty:
-            cl_l = df_lb.dropna()
-            X_l = np.nan_to_num(np.ascontiguousarray(cl_l[advanced_features].astype(float).values), nan=0.0)
-            y_l = cl_l['Target'].astype(int).values
-            
-            model_l = get_trained_model(model_algo_choice)
-            if model_l is not None:
-                model_l.fit(X_l, y_l)
-                acc = np.mean(model_l.predict(X_l) == y_l) * 100
-                st.success(f"تم التدريب بـ ({model_algo_choice})!")
-                st.metric("دقة النموذج", f"{acc:.2f}%")
-            elif LSTM_AVAILABLE:
-                scaler = MinMaxScaler()
-                X_scaled = scaler.fit_transform(X_l)
-                X_lstm = X_scaled.reshape((X_scaled.shape[0], 1, X_scaled.shape[1]))
-                
-                model_lstm = Sequential([
-                    LSTM(50, activation='relu', input_shape=(1, X_l.shape[1])),
-                    Dropout(0.2),
-                    Dense(1, activation='sigmoid')
-                ])
-                model_lstm.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-                model_lstm.fit(X_lstm, y_l, epochs=5, batch_size=32, verbose=0)
-                preds = (model_lstm.predict(X_lstm) > 0.5).astype(int).flatten()
-                st.success("تم تدريب نموذج LSTM بنجاح!")
-                st.metric("دقة LSTM (المقيسة)", f"{np.mean(preds == y_l)*100:.2f}%")
+            st.metric("العائد الإجمالي", f"{cum_returns.iloc[-1]*100:.2f}%")
 
 elif app_mode == "ماسح السوق الشامل (Market Screener)":
-    st.title("🗺️ الماسح المؤسسي الشامل لأسواق المال")
-    s_input = st.text_input("قائمة العملات المراد مسحها (مفصولة بفواصل):", value=", ".join(all_available_cryptos[:15]))
-    assets_l = [x.strip().upper() for x in s_input.split(',')]
+    st.title("🗺️ الماسح المؤسسي الشامل")
+    s_input = st.text_area("قائمة العملات للمسح (مفصولة بفواصل):", value=", ".join(all_available_cryptos[:20]))
+    assets_l = [x.strip().upper() if x.strip().upper().endswith("-USD") else f"{x.strip().upper()}-USD" for x in s_input.split(',')]
     
     if st.button("🚀 تشغيل الماسح"):
         res = []
-        with st.spinner("جاري المسح اللحظي لجميع العملات المطلوبة..."):
+        with st.spinner("جاري مسح الأصول..."):
             for ast in assets_l:
-                df_temp = load_and_process_data(ast, rsi_window=rsi_period_input)
+                df_temp = load_and_process_data(ast)
                 if df_temp is not None and not df_temp.empty:
-                    cl_t = df_temp.dropna()
-                    if len(cl_t) > 20:
-                        Xt = np.nan_to_num(np.ascontiguousarray(cl_t[advanced_features].astype(float).values), nan=0.0)
-                        yt = cl_t['Target'].astype(int).values
-                        
-                        rf_t = get_trained_model(model_algo_choice if model_algo_choice != "Deep Learning (LSTM)" else "Random Forest")
-                        rf_t.fit(Xt, yt)
-                        avg_p = rf_t.predict_proba(Xt[-1:])[0]
-                        pred_val = 1 if avg_p[1] > avg_p[0] else 0
-                        max_conf = max(avg_p)
-                            
-                        adx_v = float(df_temp['ADX'].iloc[-1])
-                        px_v = float(df_temp['Close'].iloc[-1])
-                        dec = "📈 شراء" if pred_val == 1 and max_conf >= conf_threshold_input else ("📉 بيع" if pred_val == 0 and max_conf >= conf_threshold_input else "⚠️ ترقب")
-                        res.append({"الأصل": ast, "السعر الحالي": f"${px_v:,.2f}", "ADX": f"{adx_v:.1f}", "القرار": dec, "الثقة": f"{max_conf*100:.1f}%"})
+                    px_v = float(df_temp['Close'].iloc[-1])
+                    rsi_v = float(df_temp['RSI'].iloc[-1])
+                    res.append({"الأصل": ast, "السعر الحالي": f"${px_v:,.2f}", "RSI": f"{rsi_v:.1f}"})
         if res:
             st.table(pd.DataFrame(res))
-        else:
-            st.warning("تعذر العثور على بيانات كافية للعملات المدخلة.")
 
 elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal & PnL)":
-    st.title("📈 سجل الصفقات الحية والأداء")
+    st.title("📈 سجل الصفقات الحية")
     trades_df = get_trade_journal(st.session_state['username'])
     if not trades_df.empty:
         st.dataframe(trades_df, use_container_width=True)
 
 else:
-    with st.spinner(f"جاري معالجة الأصل '{crypto_symbol}'..."):
+    with st.spinner(f"جاري جلب وتحليل البيانات لـ '{crypto_symbol}'..."):
         data = load_and_process_data(crypto_symbol, rsi_window=rsi_period_input)
 
     if data is None or data.empty:
-        st.error(f"⚠️ تعذر جلب البيانات للرمز '{crypto_symbol}'. تأكد من كُتّابة الرمز بشكل صحيح (مثال: BTC-USD).")
+        st.error(f"⚠️ لم يتم العثور على بيانات للرمز '{crypto_symbol}'. تأكد من الرمز (مثل: FLOKI أو BONK).")
     else:
         clean_data = data.dropna()
         X = np.nan_to_num(np.ascontiguousarray(clean_data[advanced_features].astype(float).values), nan=0.0)
         y = clean_data['Target'].astype(int).values
         
-        if model_algo_choice == "Deep Learning (LSTM)" and LSTM_AVAILABLE:
-            scaler = MinMaxScaler()
-            X_scaled = scaler.fit_transform(X)
-            X_lstm = X_scaled.reshape((X_scaled.shape[0], 1, X_scaled.shape[1]))
-            
-            model_instance = Sequential([LSTM(50, activation='relu', input_shape=(1, X.shape[1])), Dense(1, activation='sigmoid')])
-            model_instance.compile(optimizer='adam', loss='binary_crossentropy')
-            model_instance.fit(X_lstm, y, epochs=3, verbose=0)
-            
-            today_features = scaler.transform(np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)).reshape((1, 1, len(advanced_features)))
-            prob_up = float(model_instance.predict(today_features)[0][0])
-            max_prob = max(prob_up, 1 - prob_up)
-            prediction = 1 if prob_up > 0.5 else 0
-        else:
-            model_instance = get_trained_model(model_algo_choice)
+        model_instance = get_trained_model(model_algo_choice)
+        if model_instance:
             model_instance.fit(X, y)
             today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
             ensemble_probs = model_instance.predict_proba(today_features)[0]
             prediction = 1 if ensemble_probs[1] > ensemble_probs[0] else 0
             max_prob = max(ensemble_probs)
-
-        weekly_trend = get_weekly_trend(crypto_symbol)
-        if prediction == 1 and weekly_trend == 0:
-            max_prob *= 0.85
+        else:
+            prediction, max_prob = 1, 0.50
 
         current_price = float(data['Close'].iloc[-1])
-        current_atr_val = float(data['ATR_Val'].iloc[-1])
-        fng_val = float(data['Fear_Greed_Index'].iloc[-1])
-
-        news_sentiment = "🔥 إيجابي مفرط" if fng_val > 75 else ("❄️ سلبي مفرط" if fng_val < 25 else "⚖️ معتدل ومستقر")
-
-        sl_price = current_price - (1.5 * current_atr_val) if prediction == 1 else current_price + (1.5 * current_atr_val)
-        tp1_price = current_price + (1.0 * current_atr_val) if prediction == 1 else current_price - (1.0 * current_atr_val)
-
-        st.title(f"⚡ منصة النماذج المؤسسية المتقدمة لـ {crypto_symbol}")
-        st.markdown("---")
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("السعر الحالي", f"${current_price:,.2f}")
-        c2.metric("حالة المشاعر", news_sentiment)
-        dec_str = "📈 شراء" if prediction == 1 and max_prob >= conf_threshold_input else ("📉 بيع" if prediction == 0 and max_prob >= conf_threshold_input else "⚠️ ترقب")
-        c3.metric("قرار النظام المستقل", dec_str, delta=f"الثقة: {max_prob*100:.1f}%")
-
-        if st.button("📝 تسجيل الصفقة وبثها للمتابعين"):
-            log_trade(st.session_state['username'], crypto_symbol, dec_str, current_price, 1.0)
-            st.success("تم تسجيل الصفقة وبثها بنجاح!")
+        st.title(f"⚡ التحليل والتنبؤ النهائي لـ {crypto_symbol}")
+        
+        c1, c2 = st.columns(2)
+        c1.metric("السعر اللحظي", f"${current_price:,.4f}" if current_price < 1 else f"${current_price:,.2f}")
+        dec_str = "📈 شراء" if prediction == 1 and max_prob >= conf_threshold_input else "⚠️ ترقب"
+        c2.metric("التوصية", dec_str, delta=f"نسبة الثقة: {max_prob*100:.1f}%")
 
         fig = go.Figure(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='السعر', line=dict(color='#00FFA3')))
-        fig.update_layout(template="plotly_dark", height=450, title=f"تحليل السعر التاريخي لـ {crypto_symbol}")
+        fig.update_layout(template="plotly_dark", height=400, title=f"رسم بياني لـ {crypto_symbol}")
         st.plotly_chart(fig, use_container_width=True)
