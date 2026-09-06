@@ -88,12 +88,11 @@ def get_trade_journal(username):
     with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
         return pd.read_sql_query('SELECT id, symbol, action, price, qty, date, pnl FROM trade_journal WHERE username = ?', conn, params=(username,))
 
-# --- دالة جلب قائمة أعلى العملات الرقمية ديناميكياً مع رفع الحد إلى 250 عملة ---
+# --- دالة جلب قائمة أعلى العملات الرقمية ديناميكياً ---
 @st.cache_data(ttl=43200)
 def fetch_top_crypto_symbols(limit=250):
     symbols = []
     try:
-        # جلب الصفحات للحصول على أكبر عدد من العملات المتاحة
         pages = (limit // 100) + (1 if limit % 100 != 0 else 0)
         headers = {'User-Agent': 'Mozilla/5.0'}
         for page in range(1, pages + 1):
@@ -107,7 +106,6 @@ def fetch_top_crypto_symbols(limit=250):
     except Exception:
         pass
     
-    # دمج قائمة احتياطية موسعة جداً لضمان عدم الخلو
     fallback_list = [
         "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", 
         "AVAX-USD", "SHIB-USD", "DOT-USD", "LINK-USD", "SUI-USD", "NEAR-USD", "LTC-USD", 
@@ -180,7 +178,6 @@ if LSTM_AVAILABLE:
     algo_options.append("Deep Learning (LSTM)")
 model_algo_choice = st.sidebar.selectbox("خوارزمية الذكاء الاصطناعي:", algo_options)
 
-# جلب قائمة 250 عملة مع إتاحة البحث الحر لأي عملة في العالم
 all_available_cryptos = fetch_top_crypto_symbols(limit=250)
 
 crypto_symbol = "BTC-USD"
@@ -218,17 +215,6 @@ def get_vix_data():
         return vix[['Date', 'Close']].rename(columns={'Close': 'VIX'})
     except:
         return None
-
-@st.cache_data(ttl=3600)
-def get_weekly_trend(symbol):
-    try:
-        w_data = yf.download(symbol, period='2y', interval='1wk', progress=False)
-        if w_data is None or w_data.empty: return 1
-        if isinstance(w_data.columns, pd.MultiIndex): w_data.columns = w_data.columns.get_level_values(0)
-        sma200 = w_data['Close'].rolling(200).mean().iloc[-1]
-        return 1 if w_data['Close'].iloc[-1] >= sma200 else 0
-    except:
-        return 1
 
 @st.cache_data(ttl=3600)
 def load_and_process_data(symbol, rsi_window=14):
@@ -362,7 +348,9 @@ else:
         y = clean_data['Target'].astype(int).values
         
         model_instance = get_trained_model(model_algo_choice)
-        if model_instance:
+        
+        # التعديل الهام لمنع الخطأ AttributeError
+        if model_instance is not None:
             model_instance.fit(X, y)
             today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
             ensemble_probs = model_instance.predict_proba(today_features)[0]
