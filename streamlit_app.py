@@ -71,19 +71,6 @@ def add_user(username, password):
     except:
         return False
 
-def log_trade(username, symbol, action, price, qty, pnl=0.0):
-    date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
-        c = conn.cursor()
-        c.execute('INSERT INTO trade_journal(username, symbol, action, price, qty, date, pnl) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-                  (username, symbol, action, price, qty, date_str, pnl))
-        c.execute('SELECT follower FROM copy_trading WHERE trader = ?', (username,))
-        followers = c.fetchall()
-        for f in followers:
-            c.execute('INSERT INTO trade_journal(username, symbol, action, price, qty, date, pnl) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-                      (f[0], f"COPY-{symbol}", f"COPY-{action}", price, qty, date_str, pnl))
-        conn.commit()
-
 def get_trade_journal(username):
     with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
         return pd.read_sql_query('SELECT id, symbol, action, price, qty, date, pnl FROM trade_journal WHERE username = ?', conn, params=(username,))
@@ -315,20 +302,33 @@ elif app_mode == "🧪 محرك الاختبار الخلفي المؤسسي (In
 
 elif app_mode == "ماسح السوق الشامل (Market Screener)":
     st.title("🗺️ الماسح المؤسسي الشامل")
-    s_input = st.text_area("قائمة العملات للمسح (مفصولة بفواصل):", value=", ".join(all_available_cryptos[:20]))
-    assets_l = [x.strip().upper() if x.strip().upper().endswith("-USD") else f"{x.strip().upper()}-USD" for x in s_input.split(',')]
     
+    scan_option = st.radio("نطاق المسح المطلوب:", ["قائمة مخصصة", f"جميع العملات الرقمية المتاحة تلقائياً ({len(all_available_cryptos)} عملة)"])
+    
+    if scan_option == "قائمة مخصصة":
+        s_input = st.text_area("قائمة العملات للمسح (مفصولة بفواصل):", value=", ".join(all_available_cryptos[:20]))
+        assets_l = [x.strip().upper() if x.strip().upper().endswith("-USD") else f"{x.strip().upper()}-USD" for x in s_input.split(',') if x.strip()]
+    else:
+        scan_limit = st.slider("عدد العملات المراد مسحها:", min_value=20, max_value=len(all_available_cryptos), value=100, step=20)
+        assets_l = all_available_cryptos[:scan_limit]
+
     if st.button("🚀 تشغيل الماسح"):
         res = []
-        with st.spinner("جاري مسح الأصول..."):
-            for ast in assets_l:
-                df_temp = load_and_process_data(ast)
-                if df_temp is not None and not df_temp.empty:
-                    px_v = float(df_temp['Close'].iloc[-1])
-                    rsi_v = float(df_temp['RSI'].iloc[-1])
-                    res.append({"الأصل": ast, "السعر الحالي": f"${px_v:,.2f}", "RSI": f"{rsi_v:.1f}"})
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for idx, ast in enumerate(assets_l):
+            status_text.text(f"جاري تحليل الأصل ({idx+1}/{len(assets_l)}): {ast}")
+            df_temp = load_and_process_data(ast)
+            if df_temp is not None and not df_temp.empty:
+                px_v = float(df_temp['Close'].iloc[-1])
+                rsi_v = float(df_temp['RSI'].iloc[-1])
+                res.append({"الأصل": ast, "السعر الحالي": f"${px_v:,.4f}" if px_v < 1 else f"${px_v:,.2f}", "RSI": f"{rsi_v:.1f}"})
+            progress_bar.progress((idx + 1) / len(assets_l))
+            
+        status_text.text("اكتمل المسح بنجاح! ✅")
         if res:
-            st.table(pd.DataFrame(res))
+            st.dataframe(pd.DataFrame(res), use_container_width=True)
 
 elif app_mode == "سجل الصفقات الحي والأداء (Trade Journal & PnL)":
     st.title("📈 سجل الصفقات الحية")
@@ -349,7 +349,6 @@ else:
         
         model_instance = get_trained_model(model_algo_choice)
         
-        # التعديل الهام لمنع الخطأ AttributeError
         if model_instance is not None:
             model_instance.fit(X, y)
             today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
