@@ -321,9 +321,30 @@ elif app_mode == "ماسح السوق الشامل (Market Screener)":
             status_text.text(f"جاري تحليل الأصل ({idx+1}/{len(assets_l)}): {ast}")
             df_temp = load_and_process_data(ast)
             if df_temp is not None and not df_temp.empty:
+                clean_df = df_temp.dropna()
+                X = np.nan_to_num(np.ascontiguousarray(clean_df[advanced_features].astype(float).values), nan=0.0)
+                y = clean_df['Target'].astype(int).values
+                
+                model_inst = get_trained_model(model_algo_choice)
+                if model_inst is not None:
+                    model_inst.fit(X, y)
+                    feat = np.nan_to_num(np.ascontiguousarray(df_temp[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
+                    probs = model_inst.predict_proba(feat)[0]
+                    decision = "🟢 شـراء" if probs[1] >= 0.50 else "🔴 بيـع"
+                    confidence = max(probs) * 100
+                else:
+                    decision = "🟢 شـراء"
+                    confidence = 50.0
+
                 px_v = float(df_temp['Close'].iloc[-1])
                 rsi_v = float(df_temp['RSI'].iloc[-1])
-                res.append({"الأصل": ast, "السعر الحالي": f"${px_v:,.4f}" if px_v < 1 else f"${px_v:,.2f}", "RSI": f"{rsi_v:.1f}"})
+                res.append({
+                    "الأصل": ast, 
+                    "السعر الحالي": f"${px_v:,.4f}" if px_v < 1 else f"${px_v:,.2f}", 
+                    "التوصية": decision,
+                    "نسبة التأكيد": f"{confidence:.1f}%",
+                    "RSI": f"{rsi_v:.1f}"
+                })
             progress_bar.progress((idx + 1) / len(assets_l))
             
         status_text.text("اكتمل المسح بنجاح! ✅")
@@ -353,18 +374,26 @@ else:
             model_instance.fit(X, y)
             today_features = np.nan_to_num(np.ascontiguousarray(data[advanced_features].iloc[-1:].astype(float).values), nan=0.0)
             ensemble_probs = model_instance.predict_proba(today_features)[0]
-            prediction = 1 if ensemble_probs[1] > ensemble_probs[0] else 0
-            max_prob = max(ensemble_probs)
+            prob_buy = ensemble_probs[1]
+            prob_sell = ensemble_probs[0]
         else:
-            prediction, max_prob = 1, 0.50
+            prob_buy, prob_sell = 0.50, 0.50
 
         current_price = float(data['Close'].iloc[-1])
         st.title(f"⚡ التحليل والتنبؤ النهائي لـ {crypto_symbol}")
         
         c1, c2 = st.columns(2)
         c1.metric("السعر اللحظي", f"${current_price:,.4f}" if current_price < 1 else f"${current_price:,.2f}")
-        dec_str = "📈 شراء" if prediction == 1 and max_prob >= conf_threshold_input else "⚠️ ترقب"
-        c2.metric("التوصية", dec_str, delta=f"نسبة الثقة: {max_prob*100:.1f}%")
+        
+        # التعديل ليكون شراء أو بيع فقط وببساطة
+        if prob_buy >= 0.50:
+            dec_str = "🟢 شـراء (BUY)"
+            conf_val = prob_buy * 100
+        else:
+            dec_str = "🔴 بيـع (SELL)"
+            conf_val = prob_sell * 100
+            
+        c2.metric("التوصية المباشرة", dec_str, delta=f"نسبة التأكيد: {conf_val:.1f}%")
 
         fig = go.Figure(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='السعر', line=dict(color='#00FFA3')))
         fig.update_layout(template="plotly_dark", height=400, title=f"رسم بياني لـ {crypto_symbol}")
